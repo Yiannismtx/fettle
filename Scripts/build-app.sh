@@ -9,7 +9,8 @@
 # Usage: Scripts/build-app.sh [--debug] [--run]
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
+ROOT="$FETTLE_ROOT"
 cd "$ROOT"
 
 CONFIG="release"
@@ -38,9 +39,9 @@ FEED_URL="${FETTLE_FEED_URL:-https://raw.githubusercontent.com/Yiannismtx/fettle
 ED_PUBLIC_KEY="${FETTLE_ED_PUBLIC_KEY:-}"
 
 echo "==> Building Fettle $VERSION ($BUILD), $CONFIG"
-swift build -c "$CONFIG" --product Fettle
+swift build "${SWIFT_FLAGS[@]}" -c "$CONFIG" --product Fettle
 
-BIN_PATH="$(swift build -c "$CONFIG" --product Fettle --show-bin-path)"
+BIN_PATH="$(swift build "${SWIFT_FLAGS[@]}" -c "$CONFIG" --product Fettle --show-bin-path)"
 APP="$ROOT/dist/Fettle.app"
 
 rm -rf "$APP"
@@ -77,9 +78,9 @@ else
 fi
 
 # --- Sparkle ----------------------------------------------------------------
-SPARKLE_FRAMEWORK="$(find "$ROOT/.build" -type d -name 'Sparkle.framework' -path '*macos*' 2>/dev/null | head -1)"
+SPARKLE_FRAMEWORK="$(find "$FETTLE_SCRATCH" -type d -name 'Sparkle.framework' -path '*macos*' 2>/dev/null | head -1)"
 if [ -z "$SPARKLE_FRAMEWORK" ]; then
-  SPARKLE_FRAMEWORK="$(find "$ROOT/.build" -type d -name 'Sparkle.framework' 2>/dev/null | head -1)"
+  SPARKLE_FRAMEWORK="$(find "$FETTLE_SCRATCH" -type d -name 'Sparkle.framework' 2>/dev/null | head -1)"
 fi
 if [ -n "$SPARKLE_FRAMEWORK" ]; then
   echo "==> Embedding $(basename "$(dirname "$SPARKLE_FRAMEWORK")")/Sparkle.framework"
@@ -87,7 +88,7 @@ if [ -n "$SPARKLE_FRAMEWORK" ]; then
   # cache make codesign reject the bundle as "detritus".
   ditto --norsrc --noextattr --noacl "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
 else
-  echo "!! Sparkle.framework not found under .build — the app will not launch." >&2
+  echo "!! Sparkle.framework not found under $FETTLE_SCRATCH — the app will not launch." >&2
   exit 1
 fi
 

@@ -162,6 +162,8 @@ struct ReviewFooter: View {
     var isBusy: Bool = false
     let onSelectAll: () -> Void
     let onSelectNone: () -> Void
+    /// An optional third preset, e.g. "just the ones Fettle is confident about".
+    var extraSelection: (title: String, help: String, action: () -> Void)?
     let action: () -> Void
 
     var body: some View {
@@ -170,6 +172,11 @@ struct ReviewFooter: View {
                 .disabled(selectedCount == totalCount || totalCount == 0)
             Button("None", action: onSelectNone)
                 .disabled(selectedCount == 0)
+            if let extraSelection {
+                Button(extraSelection.title, action: extraSelection.action)
+                    .help(extraSelection.help)
+                    .disabled(totalCount == 0)
+            }
 
             Divider().frame(height: 16)
 
@@ -207,6 +214,31 @@ struct ReviewFooter: View {
     }
 }
 
+/// The Finder's icon for a file.
+///
+/// `NSWorkspace.icon(forFile:)` returns a multi-representation image whose
+/// nominal size is 32pt; handing that straight to SwiftUI makes it pick a
+/// representation for the wrong scale and fall back to the generic document
+/// glyph. Setting the size explicitly picks the right rep.
+struct FileIcon: View {
+    let url: URL
+    var size: CGFloat = 22
+
+    var body: some View {
+        Image(nsImage: Self.icon(for: url, size: size))
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+
+    private static func icon(for url: URL, size: CGFloat) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        let copy = icon.copy() as? NSImage ?? icon
+        copy.size = NSSize(width: size, height: size)
+        return copy
+    }
+}
+
 /// Icon + name + path, the row identity used by every review list.
 struct FileRowLabel: View {
     let url: URL
@@ -215,9 +247,7 @@ struct FileRowLabel: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                .resizable()
-                .frame(width: 22, height: 22)
+            FileIcon(url: url)
             VStack(alignment: .leading, spacing: 1) {
                 Text(url.lastPathComponent)
                     .lineLimit(1)
