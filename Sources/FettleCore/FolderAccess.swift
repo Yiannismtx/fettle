@@ -19,20 +19,41 @@ public struct FolderAccess: Sendable {
         )
     }
 
-    /// Returns the bookmarked folder, or the Downloads folder when there is no
-    /// bookmark or it can no longer be resolved.
-    public static func resolve(bookmark: Data?) -> (url: URL, isStale: Bool) {
-        guard let bookmark else { return (defaultFolder, false) }
-        var stale = false
-        guard let url = try? URL(
-            resolvingBookmarkData: bookmark,
-            options: [.withSecurityScope],
-            relativeTo: nil,
-            bookmarkDataIsStale: &stale
-        ) else {
-            return (defaultFolder, true)
+    /// Resolve the chosen folder.
+    ///
+    /// The bookmark wins when it resolves, because it follows the folder if it
+    /// was renamed or moved. The path is the fallback, and the Downloads folder
+    /// is the fallback for that. `isStale` is true when the stored choice
+    /// couldn't be honoured, so the UI can say so rather than quietly scanning
+    /// somewhere the user didn't pick.
+    public static func resolve(path: String, bookmark: Data?) -> (url: URL, isStale: Bool) {
+        if let bookmark {
+            var stale = false
+            if let url = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &stale
+            ) {
+                return (url, stale)
+            }
         }
-        return (url, stale)
+
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            // isDirectory: true keeps the URL shape identical to the one the
+            // folder picker produces, so equality checks against it hold.
+            let url = URL(
+                fileURLWithPath: (trimmed as NSString).expandingTildeInPath, isDirectory: true
+            )
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(
+                atPath: url.path, isDirectory: &isDirectory
+            )
+            return (url, !(exists && isDirectory.boolValue))
+        }
+
+        return (defaultFolder, bookmark != nil)
     }
 
     /// Runs `body` with security-scoped access held, when the URL needs it.

@@ -53,7 +53,8 @@ final class AppModel {
         didSet {
             guard settings != oldValue else { return }
             store.save(settings)
-            if settings.scanFolderBookmark != oldValue.scanFolderBookmark {
+            if settings.scanFolderBookmark != oldValue.scanFolderBookmark
+                || settings.scanFolderPath != oldValue.scanFolderPath {
                 refreshFolder()
             }
         }
@@ -61,7 +62,12 @@ final class AppModel {
 
     private(set) var folder: URL
     private(set) var folderIsStale: Bool
-    var selection: Destination = .overview
+    var selection: Destination = .overview {
+        didSet {
+            guard selection != oldValue else { return }
+            settings.lastDestination = selection.rawValue
+        }
+    }
     var banner: Banner?
 
     private let store: SettingsStore
@@ -94,18 +100,24 @@ final class AppModel {
         self.store = store
         let loaded = store.load()
         self.settings = loaded
-        let resolved = FolderAccess.resolve(bookmark: loaded.scanFolderBookmark)
+        let resolved = FolderAccess.resolve(
+            path: loaded.scanFolderPath, bookmark: loaded.scanFolderBookmark
+        )
         self.folder = resolved.url
         self.folderIsStale = resolved.isStale
+        self.selection = Destination(rawValue: loaded.lastDestination) ?? .overview
     }
 
     func refreshFolder() {
-        let resolved = FolderAccess.resolve(bookmark: settings.scanFolderBookmark)
+        let resolved = FolderAccess.resolve(
+            path: settings.scanFolderPath, bookmark: settings.scanFolderBookmark
+        )
         folder = resolved.url
         folderIsStale = resolved.isStale
     }
 
     func chooseFolder(_ url: URL) {
+        settings.scanFolderPath = url.path
         settings.scanFolderBookmark = FolderAccess.makeBookmark(for: url)
         // Reflect the choice immediately even if the bookmark couldn't be made.
         folder = url
@@ -113,6 +125,7 @@ final class AppModel {
     }
 
     func resetFolderToDownloads() {
+        settings.scanFolderPath = ""
         settings.scanFolderBookmark = nil
         folder = FolderAccess.defaultFolder
         folderIsStale = false

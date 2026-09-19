@@ -15,6 +15,11 @@ public struct FettleSettings: Codable, Equatable, Sendable {
     /// Skip files the Finder hides. Effectively always on; exposed for symmetry.
     public var skipHiddenFiles: Bool
     /// Where the scanners look. Defaults to ~/Downloads.
+    ///
+    /// The path is the primary record and the bookmark is the fallback: a
+    /// bookmark survives the folder being renamed or moved, but a path is
+    /// legible, inspectable, and can't silently resolve to somewhere else.
+    public var scanFolderPath: String
     public var scanFolderBookmark: Data?
     /// Send malware hits to a quarantine folder instead of the Trash.
     public var quarantineInsteadOfTrash: Bool
@@ -22,16 +27,21 @@ public struct FettleSettings: Codable, Equatable, Sendable {
     public var clamscanPathOverride: String
     /// Check for updates on launch via Sparkle.
     public var automaticUpdateChecks: Bool
+    /// The page that was open when the app last quit, so it reopens where the
+    /// user left off instead of always resetting to Overview.
+    public var lastDestination: String
 
     public static let `default` = FettleSettings(
         installerAgeThresholdDays: 30,
         requireMatchingInstalledApp: false,
         duplicateMinimumBytes: 1024,
         skipHiddenFiles: true,
+        scanFolderPath: "",
         scanFolderBookmark: nil,
         quarantineInsteadOfTrash: true,
         clamscanPathOverride: "",
-        automaticUpdateChecks: true
+        automaticUpdateChecks: true,
+        lastDestination: ""
     )
 
     public init(
@@ -39,19 +49,23 @@ public struct FettleSettings: Codable, Equatable, Sendable {
         requireMatchingInstalledApp: Bool,
         duplicateMinimumBytes: Int,
         skipHiddenFiles: Bool,
+        scanFolderPath: String = "",
         scanFolderBookmark: Data?,
         quarantineInsteadOfTrash: Bool,
         clamscanPathOverride: String,
-        automaticUpdateChecks: Bool
+        automaticUpdateChecks: Bool,
+        lastDestination: String = ""
     ) {
         self.installerAgeThresholdDays = installerAgeThresholdDays
         self.requireMatchingInstalledApp = requireMatchingInstalledApp
         self.duplicateMinimumBytes = duplicateMinimumBytes
         self.skipHiddenFiles = skipHiddenFiles
+        self.scanFolderPath = scanFolderPath
         self.scanFolderBookmark = scanFolderBookmark
         self.quarantineInsteadOfTrash = quarantineInsteadOfTrash
         self.clamscanPathOverride = clamscanPathOverride
         self.automaticUpdateChecks = automaticUpdateChecks
+        self.lastDestination = lastDestination
     }
 
     /// Clamp values that would make the app behave nonsensically if a stale or

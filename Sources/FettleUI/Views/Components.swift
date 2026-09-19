@@ -214,31 +214,6 @@ struct ReviewFooter: View {
     }
 }
 
-/// The Finder's icon for a file.
-///
-/// `NSWorkspace.icon(forFile:)` returns a multi-representation image whose
-/// nominal size is 32pt; handing that straight to SwiftUI makes it pick a
-/// representation for the wrong scale and fall back to the generic document
-/// glyph. Setting the size explicitly picks the right rep.
-struct FileIcon: View {
-    let url: URL
-    var size: CGFloat = 22
-
-    var body: some View {
-        Image(nsImage: Self.icon(for: url, size: size))
-            .interpolation(.high)
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-
-    private static func icon(for url: URL, size: CGFloat) -> NSImage {
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        let copy = icon.copy() as? NSImage ?? icon
-        copy.size = NSSize(width: size, height: size)
-        return copy
-    }
-}
-
 /// Icon + name + path, the row identity used by every review list.
 struct FileRowLabel: View {
     let url: URL
