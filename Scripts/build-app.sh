@@ -42,8 +42,19 @@ echo "==> Building Fettle $VERSION ($BUILD), $CONFIG"
 swift build "${SWIFT_FLAGS[@]}" -c "$CONFIG" --product Fettle
 
 BIN_PATH="$(swift build "${SWIFT_FLAGS[@]}" -c "$CONFIG" --product Fettle --show-bin-path)"
-APP="$ROOT/dist/Fettle.app"
 
+# The bundle is assembled outside the project. When the project lives in an
+# iCloud-synced folder, the file provider re-stamps com.apple.FinderInfo on
+# files within milliseconds of them being written — including in the gap
+# between clearing extended attributes and running codesign, which makes
+# signing fail intermittently with "resource fork, Finder information, or
+# similar detritus not allowed". Staging somewhere local removes the race.
+STAGE="$FETTLE_SCRATCH/stage"
+APP="$STAGE/Fettle.app"
+FINAL_APP="$ROOT/dist/Fettle.app"
+
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
@@ -72,7 +83,8 @@ echo "APPL????" > "$APP/Contents/PkgInfo"
 
 # --- App icon ---------------------------------------------------------------
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
-  cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+  ditto --norsrc --noextattr --noacl \
+    "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 else
   echo "    (no Resources/AppIcon.icns — run Scripts/make-icon.sh to generate one)"
 fi
@@ -104,7 +116,19 @@ IDENTITY="${FETTLE_CODESIGN_IDENTITY:--}"
 echo "==> Signing with identity: $IDENTITY"
 xattr -cr "$APP"
 codesign --force --sign "$IDENTITY" "$APP"
-codesign --verify "$APP" && echo "    signature OK"
+# A bundle that doesn't verify won't launch, so fail the build rather than
+# handing over something broken.
+if ! codesign --verify --deep --strict "$APP" 2>&1; then
+  echo "!! The signed bundle didn't verify." >&2
+  exit 1
+fi
+echo "    signature OK"
+
+# --- Publish ----------------------------------------------------------------
+mkdir -p "$ROOT/dist"
+rm -rf "$FINAL_APP"
+ditto --norsrc --noextattr --noacl "$APP" "$FINAL_APP"
+APP="$FINAL_APP"
 
 echo "==> Built $APP"
 if [ "$RUN_AFTER" = "1" ]; then
