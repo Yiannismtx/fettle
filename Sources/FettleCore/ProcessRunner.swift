@@ -100,25 +100,33 @@ extension Process {
             throw ProcessRunnerError.launchFailed(error.localizedDescription)
         }
 
-        let buffer = Locked(Data())
+        // Read stdout to EOF on a background queue rather than through
+        // `readabilityHandler`. The handler fires concurrently, so tearing it
+        // down at exit races with an invocation already in flight and silently
+        // loses output — which only shows up once a scan produces more than a
+        // pipe buffer's worth of findings.
         let handle = outPipe.fileHandleForReading
-        handle.readabilityHandler = { fileHandle in
-            let chunk = fileHandle.availableData
-            guard !chunk.isEmpty else { return }
-            let lines: [String] = buffer.withLock { pending in
-                pending.append(chunk)
-                var out: [String] = []
-                while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
-                    let lineData = pending[pending.startIndex..<newline]
-                    pending.removeSubrange(pending.startIndex...newline)
-                    out.append(
-                        String(decoding: lineData, as: UTF8.self)
+        async let streamed: Void = withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var pending = Data()
+                while true {
+                    guard let chunk = try? handle.read(upToCount: 64 * 1024), !chunk.isEmpty
+                    else { break }
+                    pending.append(chunk)
+                    while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
+                        let lineData = pending[pending.startIndex..<newline]
+                        pending.removeSubrange(pending.startIndex...newline)
+                        let line = String(decoding: lineData, as: UTF8.self)
                             .trimmingCharacters(in: .whitespacesAndNewlines)
-                    )
+                        if !line.isEmpty { onStandardOutputLine(line) }
+                    }
                 }
-                return out
+                // Whatever's left after EOF without a trailing newline.
+                let tail = String(decoding: pending, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !tail.isEmpty { onStandardOutputLine(tail) }
+                continuation.resume()
             }
-            for line in lines { onStandardOutputLine(line) }
         }
 
         async let errData = readToEnd(errPipe)
@@ -129,19 +137,9 @@ extension Process {
             process.terminate()
         }
 
-        // Drain whatever arrived between the last readability callback and exit.
-        handle.readabilityHandler = nil
-        if let remainder = try? handle.readToEnd(), !remainder.isEmpty {
-            buffer.withLock { $0.append(remainder) }
-        }
-        let tail = buffer.withLock { pending -> [String] in
-            let text = String(decoding: pending, as: UTF8.self)
-            pending.removeAll()
-            return text.split(separator: "\n", omittingEmptySubsequences: false)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-        }
-        for line in tail { onStandardOutputLine(line) }
+        // Wait for the reader to reach EOF, not just for the process to exit:
+        // output written just before exit is still in the pipe.
+        await streamed
 
         let err = await errData
         return ProcessResult(
