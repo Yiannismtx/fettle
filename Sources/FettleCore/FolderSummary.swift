@@ -51,7 +51,10 @@ public struct FolderSummarizer: Sendable {
     public init() {}
 
     public func summarize(
-        folder: URL, settings: FettleSettings, now: Date = Date()
+        folder: URL,
+        settings: FettleSettings,
+        now: Date = Date(),
+        isCancelled: () -> Bool = { false }
     ) throws -> FolderSummary {
         let all = try scanner.scan(
             folder: folder,
@@ -59,11 +62,13 @@ public struct FolderSummarizer: Sendable {
                 recursive: true,
                 skipHiddenFiles: settings.skipHiddenFiles,
                 treatPackagesAsFiles: true
-            )
+            ),
+            isCancelled: isCancelled
         )
         let topLevel = try scanner.scanTopLevelIncludingDirectories(
             folder: folder, skipHidden: settings.skipHiddenFiles
         )
+        if isCancelled() { throw CancellationError() }
 
         var counts: [FileCategory: (count: Int, bytes: Int64)] = [:]
         var totalBytes: Int64 = 0

@@ -9,6 +9,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
     case duplicates
     case organize
     case scan
+    case quarantine
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .duplicates: return "Duplicates"
         case .organize: return "Organize"
         case .scan: return "Malware Scan"
+        case .quarantine: return "Quarantine"
         }
     }
 
@@ -30,6 +32,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .duplicates: return "doc.on.doc"
         case .organize: return "folder.badge.gearshape"
         case .scan: return "checkmark.shield"
+        case .quarantine: return "lock.shield"
         }
     }
 
@@ -40,6 +43,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .duplicates: return "Identical files, matched by content"
         case .organize: return "Sort loose files into type folders"
         case .scan: return "On-demand ClamAV scan"
+        case .quarantine: return "Files a scan moved aside, and how to undo that"
         }
     }
 }

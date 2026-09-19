@@ -18,6 +18,8 @@ final class OrganizeModel {
     private(set) var isApplying = false
 
     private var planTask: Task<Void, Never>?
+    private var planCancellation: CancellationFlag?
+    private var plannedKey: [String]?
 
     var selectedItems: [OrganizePlanItem] {
         items.filter { selection.contains($0.source) }
@@ -34,13 +36,27 @@ final class OrganizeModel {
         }
     }
 
+    func planIfNeeded(context: ScanContext, settings: FettleSettings) {
+        guard plannedKey != context.organizeKey else { return }
+        plan(folder: context.folder, settings: settings)
+    }
+
     func plan(folder: URL, settings: FettleSettings) {
-        planTask?.cancel()
+        cancelPlan()
+        plannedKey = ScanContext(folder: folder, settings: settings).organizeKey
         state = .planning
+        let cancellation = CancellationFlag()
+        planCancellation = cancellation
         planTask = Task {
             let outcome: Result<OrganizePlan, Error> = await Task.detached(priority: .userInitiated) {
-                do { return .success(try Organizer().plan(folder: folder, settings: settings)) }
-                catch { return .failure(error) }
+                do {
+                    return .success(
+                        try Organizer().plan(
+                            folder: folder, settings: settings,
+                            isCancelled: { cancellation.isCancelled }
+                        )
+                    )
+                } catch { return .failure(error) }
             }.value
 
             guard !Task.isCancelled else { return }
@@ -59,11 +75,25 @@ final class OrganizeModel {
             case .failure(let error):
                 items = []
                 selection = []
-                state = .failed(
-                    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                )
+                if error is CancellationError {
+                    plannedKey = nil
+                    state = .idle
+                } else {
+                    state = .failed(
+                        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    )
+                }
             }
         }
+    }
+
+    func cancelPlan() {
+        planCancellation?.cancel()
+        planCancellation = nil
+        planTask?.cancel()
+        planTask = nil
+        plannedKey = nil
+        if case .planning = state { state = .idle }
     }
 
     func selectAll() { selection = Set(items.map(\.source)) }
@@ -96,6 +126,9 @@ final class OrganizeModel {
         let moved = Set(results.filter(\.succeeded).map(\.source))
         items.removeAll { moved.contains($0.source) }
         selection.subtract(moved)
+        // The folder just changed, so the recorded context is no longer a
+        // reason to skip the next scan.
+        plannedKey = nil
         return results
     }
 }

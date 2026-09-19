@@ -27,6 +27,12 @@ public enum Formatting {
         }
     }
 
+    /// How an age threshold reads in a sentence like "installers older than X".
+    /// A threshold of zero means "no threshold", which "today" doesn't convey.
+    public static func threshold(days: Int) -> String {
+        days <= 0 ? "any age" : age(days: days)
+    }
+
     public static func count(_ value: Int, singular: String, plural: String? = nil) -> String {
         let word = value == 1 ? singular : (plural ?? singular + "s")
         return "\(value) \(word)"

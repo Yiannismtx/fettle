@@ -6,6 +6,10 @@ struct OrganizeView: View {
     @State private var model = OrganizeModel()
     @State private var confirming = false
 
+    private var scanContext: ScanContext {
+        ScanContext(folder: app.folder, settings: app.settings)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(title: "Organize", subtitle: subtitle) {
@@ -22,10 +26,8 @@ struct OrganizeView: View {
 
             content
         }
-        .task(id: app.folder) {
-            if case .idle = model.state {
-                model.plan(folder: app.folder, settings: app.settings)
-            }
+        .task(id: scanContext.organizeKey) {
+            model.planIfNeeded(context: scanContext, settings: app.settings)
         }
         .confirmationDialog(
             "Move \(Formatting.count(model.selection.count, singular: "file")) into type folders?",

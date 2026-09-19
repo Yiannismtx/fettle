@@ -21,6 +21,7 @@ final class DuplicatesModel {
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellation: CancellationFlag?
+    private var scannedKey: [String]?
 
     var selectedBytes: Int64 {
         var total: Int64 = 0
@@ -35,8 +36,14 @@ final class DuplicatesModel {
         groups.reduce(0) { $0 + $1.duplicates.count }
     }
 
+    func scanIfNeeded(context: ScanContext, settings: FettleSettings) {
+        guard scannedKey != context.duplicateKey else { return }
+        scan(folder: context.folder, settings: settings)
+    }
+
     func scan(folder: URL, settings: FettleSettings) {
         cancelScan()
+        scannedKey = ScanContext(folder: folder, settings: settings).duplicateKey
         state = .scanning(DuplicateProgressSnapshot(fraction: 0, label: "Listing files…"))
 
         let progress = Locked(DuplicateProgressSnapshot(fraction: 0, label: "Listing files…"))
@@ -95,6 +102,7 @@ final class DuplicatesModel {
                 groups = []
                 selection = []
                 if error is CancellationError {
+                    scannedKey = nil
                     state = .idle
                 } else {
                     state = .failed(
@@ -110,6 +118,7 @@ final class DuplicatesModel {
         scanCancellation = nil
         scanTask?.cancel()
         scanTask = nil
+        scannedKey = nil
         if case .scanning = state { state = .idle }
     }
 

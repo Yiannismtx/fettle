@@ -5,6 +5,10 @@ struct OverviewView: View {
     @Environment(AppModel.self) private var app
     @State private var model = OverviewModel()
 
+    private var scanContext: ScanContext {
+        ScanContext(folder: app.folder, settings: app.settings)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(title: "Overview", subtitle: app.folder.path) {
@@ -21,8 +25,8 @@ struct OverviewView: View {
 
             content
         }
-        .task(id: app.folder) {
-            model.load(folder: app.folder, settings: app.settings)
+        .task(id: scanContext.overviewKey) {
+            model.loadIfNeeded(context: scanContext, settings: app.settings)
         }
     }
 
@@ -91,7 +95,9 @@ struct OverviewView: View {
                         SuggestionRow(
                             systemImage: Destination.installers.systemImage,
                             title: summary.agedInstallerCount > 0
-                                ? "\(Formatting.count(summary.agedInstallerCount, singular: "installer")) older than \(Formatting.age(days: app.settings.installerAgeThresholdDays))"
+                                ? (app.settings.installerAgeThresholdDays > 0
+                                    ? "\(Formatting.count(summary.agedInstallerCount, singular: "installer")) older than \(Formatting.age(days: app.settings.installerAgeThresholdDays))"
+                                    : Formatting.count(summary.agedInstallerCount, singular: "installer"))
                                 : "No aging installers",
                             detail: summary.agedInstallerCount > 0
                                 ? "\(Formatting.bytes(summary.agedInstallerBytes)) — Fettle can check which apps are already installed."
@@ -122,12 +128,9 @@ struct OverviewView: View {
                             SuggestionRow(
                                 systemImage: "lock.shield",
                                 title: "\(Formatting.count(model.quarantinedCount, singular: "file")) in quarantine",
-                                detail: Quarantine.directory.path,
+                                detail: "Moved aside by a malware scan. You can put any of them back.",
                                 isActionable: true,
-                                actionLabel: "Open in Finder",
-                                action: {
-                                    NSWorkspace.shared.open(Quarantine.directory)
-                                }
+                                action: { app.selection = .quarantine }
                             )
                         }
                     }

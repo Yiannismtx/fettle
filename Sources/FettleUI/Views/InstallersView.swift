@@ -6,6 +6,10 @@ struct InstallersView: View {
     @State private var model = InstallersModel()
     @State private var confirmingTrash = false
 
+    private var scanContext: ScanContext {
+        ScanContext(folder: app.folder, settings: app.settings)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(
@@ -25,10 +29,8 @@ struct InstallersView: View {
 
             content
         }
-        .task(id: app.folder) {
-            if case .idle = model.state {
-                model.scan(folder: app.folder, settings: app.settings)
-            }
+        .task(id: scanContext.installerKey) {
+            model.scanIfNeeded(context: scanContext, settings: app.settings)
         }
         .confirmationDialog(
             "Move \(Formatting.count(model.selection.count, singular: "installer")) to the Trash?",
@@ -45,7 +47,11 @@ struct InstallersView: View {
     private var subtitle: String {
         switch model.state {
         case .loaded(let summary) where summary.total > 0:
-            return "\(Formatting.count(summary.total, singular: "installer")) older than \(Formatting.age(days: app.settings.installerAgeThresholdDays)) · \(summary.installedAppCount) apps installed"
+            let threshold = app.settings.installerAgeThresholdDays
+            let aged = threshold > 0
+                ? " older than \(Formatting.age(days: threshold))"
+                : ""
+            return "\(Formatting.count(summary.total, singular: "installer"))\(aged) · \(summary.installedAppCount) apps installed"
         default:
             return "Disk images and packages you've already installed from"
         }
@@ -58,7 +64,9 @@ struct InstallersView: View {
             EmptyStateView(
                 systemImage: "shippingbox",
                 title: "Ready when you are",
-                message: "Fettle will look for .dmg and .pkg files older than \(Formatting.age(days: app.settings.installerAgeThresholdDays)) and check whether the app is already installed.",
+                message: app.settings.installerAgeThresholdDays > 0
+                    ? "Fettle will look for .dmg and .pkg files older than \(Formatting.age(days: app.settings.installerAgeThresholdDays)) and check whether the app is already installed."
+                    : "Your age threshold is zero, so Fettle will look at every .dmg and .pkg here and check whether the app is already installed.",
                 actionTitle: "Scan",
                 action: { model.scan(folder: app.folder, settings: app.settings) }
             )

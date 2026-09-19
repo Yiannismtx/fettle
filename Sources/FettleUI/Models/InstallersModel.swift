@@ -18,6 +18,9 @@ final class InstallersModel {
     private(set) var isApplying = false
 
     private var scanTask: Task<Void, Never>?
+    private var scanCancellation: CancellationFlag?
+    /// The context the current results were computed under.
+    private var scannedKey: [String]?
 
     var selectedCandidates: [InstallerCandidate] {
         candidates.filter { selection.contains($0.url) }
@@ -27,13 +30,29 @@ final class InstallersModel {
         selectedCandidates.reduce(0) { $0 + $1.size }
     }
 
+    /// Scan only if the folder or a relevant setting has changed since the last
+    /// one — so navigating back to this page doesn't redo the work, but
+    /// changing the age threshold does.
+    func scanIfNeeded(context: ScanContext, settings: FettleSettings) {
+        guard scannedKey != context.installerKey else { return }
+        scan(folder: context.folder, settings: settings)
+    }
+
     func scan(folder: URL, settings: FettleSettings) {
-        scanTask?.cancel()
+        cancelScan()
+        scannedKey = ScanContext(folder: folder, settings: settings).installerKey
         state = .scanning
+        let cancellation = CancellationFlag()
+        scanCancellation = cancellation
         scanTask = Task {
             let outcome: Result<InstallerScanResult, Error> = await Task.detached(priority: .userInitiated) {
                 do {
-                    return .success(try InstallerScanner().scan(folder: folder, settings: settings))
+                    return .success(
+                        try InstallerScanner().scan(
+                            folder: folder, settings: settings,
+                            isCancelled: { cancellation.isCancelled }
+                        )
+                    )
                 } catch {
                     return .failure(error)
                 }
@@ -57,16 +76,26 @@ final class InstallersModel {
             case .failure(let error):
                 candidates = []
                 selection = []
-                state = .failed(
-                    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                )
+                if error is CancellationError {
+                    scannedKey = nil
+                    state = .idle
+                } else {
+                    state = .failed(
+                        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    )
+                }
             }
         }
     }
 
     func cancelScan() {
+        scanCancellation?.cancel()
+        scanCancellation = nil
         scanTask?.cancel()
         scanTask = nil
+        // Cancelling invalidates the recorded context, so returning to the page
+        // scans again rather than showing a half-finished list.
+        scannedKey = nil
         if case .scanning = state { state = .idle }
     }
 

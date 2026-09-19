@@ -20,6 +20,7 @@ permanent-delete API on it at all.
 | **Duplicates** | Byte-identical files found by SHA-256, so it catches the same file saved under two unrelated names. Keeps the oldest copy; you can override which one stays. |
 | **Organize** | Sorts loose top-level files into Images / Documents / Archives / Installers / Other. Never overwrites: a name that's taken gets numbered. |
 | **Malware Scan** | Hands the folder to ClamAV's `clamscan` and reports what it flags. Flagged files go to quarantine or the Trash — never deleted, never acted on without you. |
+| **Quarantine** | What a scan moved aside, what matched it, and a Put Back button. A signature match isn't proof, so the most consequential action in the app is also the one with an undo. |
 
 ### What it deliberately doesn't do
 

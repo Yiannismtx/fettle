@@ -67,7 +67,8 @@ public struct InstallerScanner: Sendable {
         folder: URL,
         settings: FettleSettings,
         now: Date = Date(),
-        matcher: AppMatcher? = nil
+        matcher: AppMatcher? = nil,
+        isCancelled: () -> Bool = { false }
     ) throws -> InstallerScanResult {
         let entries = try scanner.scan(
             folder: folder,
@@ -75,10 +76,15 @@ public struct InstallerScanner: Sendable {
                 recursive: true,
                 skipHiddenFiles: settings.skipHiddenFiles,
                 treatPackagesAsFiles: true
-            )
+            ),
+            isCancelled: isCancelled
         )
 
+        if isCancelled() { throw CancellationError() }
+        // Reading /Applications means opening every app bundle's Info.plist,
+        // which is the slow half of this scan on a machine with many apps.
         let matcher = matcher ?? AppMatcher()
+        if isCancelled() { throw CancellationError() }
         let thresholdDays = settings.installerAgeThresholdDays
         var candidates: [InstallerCandidate] = []
         var skipped = 0

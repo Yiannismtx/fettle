@@ -26,6 +26,7 @@ struct RootView: View {
         case .duplicates: DuplicatesView()
         case .organize: OrganizeView()
         case .scan: MalwareScanView()
+        case .quarantine: QuarantineView()
         }
     }
 }

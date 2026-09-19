@@ -6,6 +6,10 @@ struct DuplicatesView: View {
     @State private var model = DuplicatesModel()
     @State private var confirmingTrash = false
 
+    private var scanContext: ScanContext {
+        ScanContext(folder: app.folder, settings: app.settings)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(title: "Duplicates", subtitle: subtitle) {
@@ -22,10 +26,8 @@ struct DuplicatesView: View {
 
             content
         }
-        .task(id: app.folder) {
-            if case .idle = model.state {
-                model.scan(folder: app.folder, settings: app.settings)
-            }
+        .task(id: scanContext.duplicateKey) {
+            model.scanIfNeeded(context: scanContext, settings: app.settings)
         }
         .confirmationDialog(
             "Move \(Formatting.count(model.selection.count, singular: "duplicate")) to the Trash?",

@@ -58,10 +58,15 @@ public struct Organizer: Sendable {
 
     public init() {}
 
-    public func plan(folder: URL, settings: FettleSettings) throws -> OrganizePlan {
+    public func plan(
+        folder: URL,
+        settings: FettleSettings,
+        isCancelled: () -> Bool = { false }
+    ) throws -> OrganizePlan {
         let entries = try scanner.scanTopLevelIncludingDirectories(
             folder: folder, skipHidden: settings.skipHiddenFiles
         )
+        if isCancelled() { throw CancellationError() }
 
         let fileManager = FileManager()
         var items: [OrganizePlanItem] = []
