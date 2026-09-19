@@ -73,6 +73,17 @@ final class AppModel {
         }
     }
     var banner: Banner?
+    /// Bumped whenever Fettle moves or trashes anything.
+    ///
+    /// Each screen caches its results, so without this, trashing installers on
+    /// one page would leave the Overview and the duplicate list quoting numbers
+    /// from before the move — plausible-looking figures for a folder that no
+    /// longer exists in that shape.
+    private(set) var folderRevision = 0
+
+    func noteFolderChanged() {
+        folderRevision &+= 1
+    }
 
     private let store: SettingsStore
 
@@ -142,6 +153,7 @@ final class AppModel {
     /// Summarise a batch of file operations into one banner, naming failures
     /// rather than quietly swallowing them.
     func reportResults(_ results: [FileActionResult], verb: String, freedBytes: Int64? = nil) {
+        if results.contains(where: \.succeeded) { noteFolderChanged() }
         let failures = results.filter { !$0.succeeded }
         let successes = results.count - failures.count
 

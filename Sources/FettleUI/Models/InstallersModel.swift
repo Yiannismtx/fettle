@@ -80,6 +80,10 @@ final class InstallersModel {
                     scannedKey = nil
                     state = .idle
                 } else {
+                    // Don't record the context for a failure: if the user fixes
+                    // whatever went wrong and comes back, the page should try
+                    // again rather than sit on the error.
+                    scannedKey = nil
                     state = .failed(
                         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     )
@@ -129,6 +133,15 @@ final class InstallersModel {
         selection.subtract(removed)
         return (results, freed)
     }
+
+    /// Record a context as already reflected in the current results.
+    ///
+    /// After this screen acts on files it updates its own list in place, so it
+    /// shouldn't redo the work just because the folder revision moved — which
+    /// for the duplicate scan would mean rehashing every candidate again.
+    func acknowledge(_ context: ScanContext) {
+        scannedKey = context.installerKey
+    }
 }
 
 struct InstallerScanSummary: Equatable, Sendable {
@@ -136,4 +149,5 @@ struct InstallerScanSummary: Equatable, Sendable {
     let recommended: Int
     let skippedForAge: Int
     let installedAppCount: Int
+
 }

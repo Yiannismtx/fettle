@@ -58,8 +58,4 @@ final class UpdaterController {
     func setAutomaticChecks(_ enabled: Bool) {
         controller?.updater.automaticallyChecksForUpdates = enabled
     }
-
-    var automaticChecksEnabled: Bool {
-        controller?.updater.automaticallyChecksForUpdates ?? false
-    }
 }

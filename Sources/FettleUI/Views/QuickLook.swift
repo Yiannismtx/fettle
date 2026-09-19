@@ -38,7 +38,7 @@ extension QuickLookPreview: @preconcurrency QLPreviewPanelDataSource {
     }
 }
 
-extension QuickLookPreview: @preconcurrency QLPreviewPanelDelegate {}
+extension QuickLookPreview: QLPreviewPanelDelegate {}
 
 enum QuickLook {
     @MainActor

@@ -7,7 +7,11 @@ struct DuplicatesView: View {
     @State private var confirmingTrash = false
 
     private var scanContext: ScanContext {
-        ScanContext(folder: app.folder, settings: app.settings)
+        ScanContext(
+            folder: app.folder,
+            settings: app.settings,
+            revision: app.folderRevision
+        )
     }
 
     var body: some View {
@@ -140,6 +144,9 @@ struct DuplicatesView: View {
         Task {
             let outcome = await model.trashSelected()
             app.reportResults(outcome.results, verb: "Trashed", freedBytes: outcome.freed)
+            // This page already updated its own list; only the others need to
+            // recompute after the folder changed.
+            model.acknowledge(scanContext)
         }
     }
 }

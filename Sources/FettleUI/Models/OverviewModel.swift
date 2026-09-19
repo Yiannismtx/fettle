@@ -66,6 +66,7 @@ final class OverviewModel {
                     loadedKey = nil
                     state = .loading
                 } else {
+                    loadedKey = nil
                     state = .failed(
                         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     )

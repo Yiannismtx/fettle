@@ -55,14 +55,4 @@ public struct FolderAccess: Sendable {
 
         return (defaultFolder, bookmark != nil)
     }
-
-    /// Runs `body` with security-scoped access held, when the URL needs it.
-    /// Outside a sandbox `startAccessingSecurityScopedResource` returns false and
-    /// access works anyway, so a false return is not an error.
-    @discardableResult
-    public static func withAccess<T>(to url: URL, _ body: () throws -> T) rethrows -> T {
-        let granted = url.startAccessingSecurityScopedResource()
-        defer { if granted { url.stopAccessingSecurityScopedResource() } }
-        return try body()
-    }
 }

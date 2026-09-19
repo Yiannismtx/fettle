@@ -149,6 +149,29 @@ struct ScanContextTests {
         #expect(settled, "changing the threshold left the old results on screen")
     }
 
+    @Test("Moving files invalidates the other pages' cached results")
+    func revisionInvalidates() async throws {
+        let folder = try TempFolder()
+        try folder.write("a.png")
+
+        let model = OrganizeModel()
+        let before = ScanContext(folder: folder.url, settings: .default, revision: 0)
+        model.planIfNeeded(context: before, settings: .default)
+        _ = await waitUntil { if case .ready = model.state { return true }; return false }
+
+        // A different page moved something; this page's results are now stale.
+        let after = ScanContext(folder: folder.url, settings: .default, revision: 1)
+        #expect(before.organizeKey != after.organizeKey)
+
+        // Unless it was this page that acted, in which case it already updated
+        // its own list and must not redo the work.
+        model.acknowledge(after)
+        model.planIfNeeded(context: after, settings: .default)
+        if case .ready = model.state {} else {
+            Issue.record("the acting page redid work it had already accounted for")
+        }
+    }
+
     @Test("A setting the page doesn't use doesn't force a rescan")
     func irrelevantSettingIsIgnored() {
         let folder = URL(fileURLWithPath: "/tmp")

@@ -105,6 +105,7 @@ final class DuplicatesModel {
                     scannedKey = nil
                     state = .idle
                 } else {
+                    scannedKey = nil
                     state = .failed(
                         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     )
@@ -187,6 +188,15 @@ final class DuplicatesModel {
         selection.subtract(removed)
         return (results, freed)
     }
+
+    /// Record a context as already reflected in the current results.
+    ///
+    /// After this screen acts on files it updates its own list in place, so it
+    /// shouldn't redo the work just because the folder revision moved — which
+    /// for the duplicate scan would mean rehashing every candidate again.
+    func acknowledge(_ context: ScanContext) {
+        scannedKey = context.duplicateKey
+    }
 }
 
 struct DuplicateProgressSnapshot: Equatable, Sendable {
@@ -221,4 +231,5 @@ struct DuplicateSummary: Equatable, Sendable {
     let reclaimableBytes: Int64
     let filesConsidered: Int
     let filesHashed: Int
+
 }

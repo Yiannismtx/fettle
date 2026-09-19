@@ -6,7 +6,11 @@ struct OverviewView: View {
     @State private var model = OverviewModel()
 
     private var scanContext: ScanContext {
-        ScanContext(folder: app.folder, settings: app.settings)
+        ScanContext(
+            folder: app.folder,
+            settings: app.settings,
+            revision: app.folderRevision
+        )
     }
 
     var body: some View {

@@ -124,32 +124,6 @@ struct PageHeader<Trailing: View>: View {
     }
 }
 
-/// A progress strip that reports what is happening rather than just spinning.
-struct ScanProgressBar: View {
-    let progress: Double
-    let label: String
-    var onCancel: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.m) {
-            ProgressView(value: progress.isFinite ? min(max(progress, 0), 1) : 0)
-                .progressViewStyle(.linear)
-            Text(label)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(minWidth: 150, alignment: .leading)
-                .monospacedDigit()
-            if let onCancel {
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.bordered)
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, Theme.Spacing.s)
-    }
-}
-
 /// The bar that sits under every review list: what's selected, what it frees,
 /// and the single button that commits the change.
 struct ReviewFooter: View {

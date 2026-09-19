@@ -7,7 +7,11 @@ struct OrganizeView: View {
     @State private var confirming = false
 
     private var scanContext: ScanContext {
-        ScanContext(folder: app.folder, settings: app.settings)
+        ScanContext(
+            folder: app.folder,
+            settings: app.settings,
+            revision: app.folderRevision
+        )
     }
 
     var body: some View {
@@ -153,6 +157,9 @@ struct OrganizeView: View {
         Task {
             let results = await model.apply()
             app.reportResults(results, verb: "Moved")
+            // This page already updated its own list; only the others need to
+            // recompute after the folder changed.
+            model.acknowledge(scanContext)
         }
     }
 }

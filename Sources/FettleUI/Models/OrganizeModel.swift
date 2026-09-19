@@ -29,13 +29,6 @@ final class OrganizeModel {
         selectedItems.reduce(0) { $0 + $1.size }
     }
 
-    var groupedSelection: [(category: FileCategory, count: Int)] {
-        FileCategory.allCases.compactMap { category in
-            let count = selectedItems.filter { $0.category == category }.count
-            return count == 0 ? nil : (category, count)
-        }
-    }
-
     func planIfNeeded(context: ScanContext, settings: FettleSettings) {
         guard plannedKey != context.organizeKey else { return }
         plan(folder: context.folder, settings: settings)
@@ -79,6 +72,7 @@ final class OrganizeModel {
                     plannedKey = nil
                     state = .idle
                 } else {
+                    plannedKey = nil
                     state = .failed(
                         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     )
@@ -126,10 +120,16 @@ final class OrganizeModel {
         let moved = Set(results.filter(\.succeeded).map(\.source))
         items.removeAll { moved.contains($0.source) }
         selection.subtract(moved)
-        // The folder just changed, so the recorded context is no longer a
-        // reason to skip the next scan.
-        plannedKey = nil
         return results
+    }
+
+    /// Record a context as already reflected in the current results.
+    ///
+    /// After this screen acts on files it updates its own list in place, so it
+    /// shouldn't redo the work just because the folder revision moved — which
+    /// for the duplicate scan would mean rehashing every candidate again.
+    func acknowledge(_ context: ScanContext) {
+        plannedKey = context.organizeKey
     }
 }
 
@@ -137,4 +137,5 @@ struct OrganizeSummary: Equatable, Sendable {
     let total: Int
     let skippedDirectories: Int
     let alreadyOrganized: Int
+
 }

@@ -9,13 +9,17 @@ import FettleCore
 /// to miss, because the stale list looks perfectly plausible.
 struct ScanContext: Equatable, Sendable {
     let folder: URL
+    /// Changes whenever Fettle moves or trashes something, so every screen's
+    /// cached results are invalidated together.
+    let revision: Int
     let skipHiddenFiles: Bool
     let installerAgeThresholdDays: Int
     let requireMatchingInstalledApp: Bool
     let duplicateMinimumBytes: Int
 
-    init(folder: URL, settings: FettleSettings) {
+    init(folder: URL, settings: FettleSettings, revision: Int = 0) {
         self.folder = folder
+        self.revision = revision
         self.skipHiddenFiles = settings.skipHiddenFiles
         self.installerAgeThresholdDays = settings.installerAgeThresholdDays
         self.requireMatchingInstalledApp = settings.requireMatchingInstalledApp
@@ -26,6 +30,7 @@ struct ScanContext: Equatable, Sendable {
     /// setting one screen doesn't use never forces it to rescan.
     var installerKey: [String] {
         [
+            "\(revision)",
             folder.path,
             "\(skipHiddenFiles)",
             "\(installerAgeThresholdDays)",
@@ -34,14 +39,14 @@ struct ScanContext: Equatable, Sendable {
     }
 
     var duplicateKey: [String] {
-        [folder.path, "\(skipHiddenFiles)", "\(duplicateMinimumBytes)"]
+        ["\(revision)", folder.path, "\(skipHiddenFiles)", "\(duplicateMinimumBytes)"]
     }
 
     var organizeKey: [String] {
-        [folder.path, "\(skipHiddenFiles)"]
+        ["\(revision)", folder.path, "\(skipHiddenFiles)"]
     }
 
     var overviewKey: [String] {
-        [folder.path, "\(skipHiddenFiles)", "\(installerAgeThresholdDays)"]
+        ["\(revision)", folder.path, "\(skipHiddenFiles)", "\(installerAgeThresholdDays)"]
     }
 }
