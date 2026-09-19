@@ -52,11 +52,27 @@ public struct FolderScanOptions: Sendable {
     /// duplicate and installer scanners don't.
     public var includeDirectories: Bool
 
+    /// Directories that hold machine-managed files rather than the user's own:
+    /// package caches, build output, version-control internals.
+    ///
+    /// Fettle skips these everywhere. A file inside `node_modules` is identical
+    /// to thousands of others by design, so surfacing it as a "duplicate" is
+    /// noise at best — and trashing it silently breaks whatever project it
+    /// belongs to, which is exactly the kind of damage this app must not do.
+    public static let managedDirectoryNames: Set<String> = [
+        // Deliberately specific: generic names like "build", "target" or
+        // "vendor" can easily be a folder of the user's own files.
+        "node_modules", ".git", ".hg", ".svn", ".venv", "venv",
+        "__pycache__", ".tox", "Pods", "Carthage", ".build",
+        "DerivedData", ".gradle", ".next", ".nuxt", ".cache",
+        ".terraform", "bower_components", ".pnpm-store", ".yarn",
+    ]
+
     public init(
         recursive: Bool = false,
         skipHiddenFiles: Bool = true,
         treatPackagesAsFiles: Bool = true,
-        excludedDirectoryNames: Set<String> = [],
+        excludedDirectoryNames: Set<String> = FolderScanOptions.managedDirectoryNames,
         includeDirectories: Bool = false
     ) {
         self.recursive = recursive
@@ -93,8 +109,15 @@ public struct FolderScanner: Sendable {
         .isSymbolicLinkKey,
     ]
 
+    /// - Parameters:
+    ///   - onProgress: called with the running file count while enumerating, so
+    ///     a deep folder can show movement instead of an unexplained pause.
+    ///   - isCancelled: checked per directory, so a huge tree stops promptly.
     public func scan(
-        folder: URL, options: FolderScanOptions = FolderScanOptions()
+        folder: URL,
+        options: FolderScanOptions = FolderScanOptions(),
+        onProgress: ((Int) -> Void)? = nil,
+        isCancelled: () -> Bool = { false }
     ) throws -> [FileEntry] {
         let fm = FileManager()
         var isDirectory: ObjCBool = false
@@ -110,6 +133,7 @@ public struct FolderScanner: Sendable {
         var visitedDirectories = Set<String>()
 
         while let directory = queue.popLast() {
+            if isCancelled() { throw CancellationError() }
             // Guard against symlink loops when recursing.
             let resolved = directory.resolvingSymlinksInPath().standardizedFileURL.path
             guard visitedDirectories.insert(resolved).inserted else { continue }
@@ -173,6 +197,7 @@ public struct FolderScanner: Sendable {
                     )
                 )
             }
+            onProgress?(entries.count)
         }
 
         return entries.sorted { $0.url.path < $1.url.path }
