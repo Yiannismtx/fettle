@@ -127,9 +127,16 @@ struct ClamAVSetupView: View {
                         .disabled(model.readiness.hasClamAV && model.phase == .idle)
 
                         if model.readiness.hasClamAV {
-                            Text("Already installed — use Re-check in Settings if the scan still can't find it.")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text("Already installed — if the scan still can't find it, re-check from Settings › Scanning.")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                SettingsLink {
+                                    Label("Open Settings", systemImage: "gearshape")
+                                }
+                                .controlSize(.small)
+                            }
                         }
                         Spacer(minLength: 0)
                     }
@@ -334,9 +341,15 @@ private struct ManualInstructions: View {
                 Step(
                     number: 4,
                     title: "Point Fettle at it, if needed",
-                    note: "Fettle looks in \(prefix)/bin and the other standard locations. If your clamscan lives somewhere else, set the path in Settings › Scanning."
+                    note: "Fettle looks in \(prefix)/bin and the other standard locations. If your clamscan lives somewhere else, paste the path into Settings › Scanning."
                 ) {
                     CommandRow(command: "which clamscan", note: "prints the path to use")
+                    // A step that ends by naming a window the reader has no way
+                    // to open is a step that doesn't finish.
+                    SettingsLink {
+                        Label("Open Settings › Scanning", systemImage: "gearshape")
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(.top, Theme.Spacing.s)

@@ -68,9 +68,27 @@ private struct FolderToolbar: ToolbarContent {
                     model.chooseFolder(url)
                 }
             } label: {
-                Label("Choose Folder…", systemImage: "folder.badge.gearshape")
+                // Plain folder, not folder.badge.gearshape: that symbol reads
+                // as "folder settings", which this button isn't, and sitting
+                // next to the real Settings gear it made both of them vaguer.
+                Label("Choose Folder…", systemImage: "folder")
             }
             .help("Point Fettle at a different folder")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            // Fettle's settings were reachable only from the menu bar, which
+            // is where macOS puts them and also where nobody looks. Several
+            // screens tell the user to go and change something in Settings —
+            // the clamscan path, the installer age threshold — and naming a
+            // place with no way to get there is a dead end dressed as help.
+            //
+            // SettingsLink rather than a Button calling openSettings: it is
+            // the documented way to open the Settings scene from a control,
+            // and it stays correct whichever window happens to be frontmost.
+            SettingsLink {
+                Label("Settings…", systemImage: "gearshape")
+            }
+            .help("Thresholds, scanning, and updates (⌘,)")
         }
     }
 }
