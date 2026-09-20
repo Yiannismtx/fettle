@@ -73,6 +73,10 @@ before scanning, names the ones that were blocked, and offers a button that
 opens the right System Settings pane. A result that couldn't read everything
 says so instead of claiming nothing was found.
 
+**Settings › Scanning** shows the permission as a standing fact rather than
+only as a warning mid-scan, alongside which scan the page opens with and the
+ClamAV status. Settings is on the toolbar as well as at ⌘,.
+
 ## Installing ClamAV
 
 Fettle uses ClamAV's detection engine rather than writing one (see

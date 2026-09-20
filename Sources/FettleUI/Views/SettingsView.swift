@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import FettleCore
 
 struct SettingsView: View {
@@ -116,10 +117,36 @@ private struct CleanupSettingsTab: View {
 private struct ScanningSettingsTab: View {
     @Environment(AppModel.self) private var model
     @State private var probe = ClamAVAvailability.unknown
+    @State private var access = FullDiskAccessStatus.unknown
 
     var body: some View {
         @Bindable var model = model
         Form {
+            Section("Coverage") {
+                LabeledContent("Full Disk Access") {
+                    FullDiskAccessLabel(status: access)
+                }
+                HStack(spacing: Theme.Spacing.m) {
+                    Button("Re-check") { Task { await refresh() } }
+                    if access != .granted {
+                        Button("Open System Settings") {
+                            NSWorkspace.shared.open(FullDiskAccess.settingsPaneURL)
+                        }
+                        .help("Privacy & Security › Full Disk Access")
+                    }
+                }
+            }
+            Section("Malware scan") {
+                Picker("Opens with", selection: $model.settings.lastMalwareScanKind) {
+                    ForEach(MalwareScanKind.allCases) { kind in
+                        Text(kind.title).tag(kind.rawValue)
+                    }
+                }
+                Text(scanKindSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("ClamAV") {
                 LabeledContent("Status") {
                     ClamAVStatusLabel(availability: probe)
@@ -155,8 +182,19 @@ private struct ScanningSettingsTab: View {
         .task { await refresh() }
     }
 
+    /// What the currently chosen scan actually covers.
+    ///
+    /// Picking between three names is only a choice if the names mean
+    /// something, and "Quick" on its own doesn't say what it skips.
+    private var scanKindSummary: String {
+        let kind = MalwareScanKind(rawValue: model.settings.lastMalwareScanKind) ?? .quick
+        return "\(kind.summary) \(kind.expectedDuration). "
+            + "Running a different scan makes that one the new default."
+    }
+
     private func refresh() async {
         probe = await ClamAVService(overridePath: model.settings.clamscanPathOverride).probe()
+        access = await Task.detached(priority: .utility) { FullDiskAccess.probe() }.value
     }
 }
 
