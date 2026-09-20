@@ -2,19 +2,36 @@ import SwiftUI
 import AppKit
 import FettleCore
 
+/// Settings, rendered as a page in the main window rather than in a Settings
+/// scene of its own.
+///
+/// It carries the same header as every other page so it reads as part of the
+/// app rather than as a dialog that wandered in, and the form is held to a
+/// readable width instead of stretching across a wide window.
 struct SettingsView: View {
     var body: some View {
-        TabView {
-            GeneralSettingsTab()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            CleanupSettingsTab()
-                .tabItem { Label("Cleanup", systemImage: "sparkles") }
-            ScanningSettingsTab()
-                .tabItem { Label("Scanning", systemImage: "checkmark.shield") }
-            UpdatesSettingsTab()
-                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        VStack(spacing: 0) {
+            PageHeader(
+                title: "Settings",
+                subtitle: "What the other pages do, and how"
+            ) {}
+
+            Divider()
+
+            TabView {
+                GeneralSettingsTab()
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                CleanupSettingsTab()
+                    .tabItem { Label("Cleanup", systemImage: "sparkles") }
+                ScanningSettingsTab()
+                    .tabItem { Label("Scanning", systemImage: "checkmark.shield") }
+                UpdatesSettingsTab()
+                    .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+            }
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Spacing.l)
         }
-        .frame(width: 520)
     }
 }
 

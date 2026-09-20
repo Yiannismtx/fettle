@@ -10,6 +10,7 @@ import FettleCore
 /// own installer needs an admin password, which it must ask for itself — it
 /// says so plainly and hands over exact, copyable commands.
 struct ClamAVSetupView: View {
+    @Environment(AppModel.self) private var app
     /// Non-nil when clamscan was found but wouldn't run.
     let brokenReason: String?
     let clamscanOverride: String
@@ -132,7 +133,9 @@ struct ClamAVSetupView: View {
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
-                                SettingsLink {
+                                Button {
+                                    app.selection = .settings
+                                } label: {
                                     Label("Open Settings", systemImage: "gearshape")
                                 }
                                 .controlSize(.small)
@@ -306,6 +309,7 @@ private struct InstallLogView: View {
 /// run it themselves, or needs to debug it when it goes wrong.
 private struct ManualInstructions: View {
     let prefix: String
+    @Environment(AppModel.self) private var app
     @State private var isExpanded = false
 
     var body: some View {
@@ -346,7 +350,9 @@ private struct ManualInstructions: View {
                     CommandRow(command: "which clamscan", note: "prints the path to use")
                     // A step that ends by naming a window the reader has no way
                     // to open is a step that doesn't finish.
-                    SettingsLink {
+                    Button {
+                        app.selection = .settings
+                    } label: {
                         Label("Open Settings › Scanning", systemImage: "gearshape")
                     }
                     .controlSize(.small)

@@ -21,6 +21,7 @@ permanent-delete API on it at all.
 | **Organize** | Sorts loose top-level files into Images / Documents / Archives / Installers / Other. Never overwrites: a name that's taken gets numbered. |
 | **Malware Scan** | Three scans through ClamAV's `clamscan`: **Quick** over the folders malware arrives and hides in, **Folder** over one folder you pick, and **Full System** over the whole startup disk. Flagged files go to quarantine or the Trash — never deleted, never acted on without you. |
 | **Quarantine** | What a scan moved aside, what matched it, and a Put Back button. A signature match isn't proof, so the most consequential action in the app is also the one with an undo. |
+| **Settings** | A page in the window, not a separate settings window: the folder, the thresholds, which scan runs, Full Disk Access and ClamAV's status. Reachable from the sidebar, the toolbar, or ⌘,. |
 
 ### What it deliberately doesn't do
 
@@ -75,7 +76,7 @@ says so instead of claiming nothing was found.
 
 **Settings › Scanning** shows the permission as a standing fact rather than
 only as a warning mid-scan, alongside which scan the page opens with and the
-ClamAV status. Settings is on the toolbar as well as at ⌘,.
+ClamAV status.
 
 ## Installing ClamAV
 

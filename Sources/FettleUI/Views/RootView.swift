@@ -27,6 +27,7 @@ struct RootView: View {
         case .organize: OrganizeView()
         case .scan: MalwareScanView()
         case .quarantine: QuarantineView()
+        case .settings: SettingsView()
         }
     }
 }
@@ -76,19 +77,17 @@ private struct FolderToolbar: ToolbarContent {
             .help("Point Fettle at a different folder")
         }
         ToolbarItem(placement: .primaryAction) {
-            // Fettle's settings were reachable only from the menu bar, which
-            // is where macOS puts them and also where nobody looks. Several
-            // screens tell the user to go and change something in Settings —
-            // the clamscan path, the installer age threshold — and naming a
-            // place with no way to get there is a dead end dressed as help.
-            //
-            // SettingsLink rather than a Button calling openSettings: it is
-            // the documented way to open the Settings scene from a control,
-            // and it stays correct whichever window happens to be frontmost.
-            SettingsLink {
-                Label("Settings…", systemImage: "gearshape")
+            // Settings is a page in this window, not a separate one, so this
+            // navigates rather than opening anything. A second window showing
+            // the same form is a second place for the app's state to live and
+            // one more thing to close.
+            Button {
+                model.selection = .settings
+            } label: {
+                Label("Settings", systemImage: "gearshape")
             }
             .help("Thresholds, scanning, and updates (⌘,)")
+            .disabled(model.selection == .settings)
         }
     }
 }
