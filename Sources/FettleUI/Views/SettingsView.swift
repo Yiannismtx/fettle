@@ -8,6 +8,12 @@ import FettleCore
 /// It carries the same header as every other page so it reads as part of the
 /// app rather than as a dialog that wandered in, and the form is held to a
 /// readable width instead of stretching across a wide window.
+///
+/// One scrolling form rather than tabs. The sidebar is already the app's
+/// navigation, and a row of tabs inside a page is a second layer of it —
+/// settings hidden behind a tab inside a page are settings nobody finds. It is
+/// also what a fixed-height tab box costs: a card floating in a pane with dead
+/// space under it, which reads as an unfinished window rather than a page.
 struct SettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -18,30 +24,29 @@ struct SettingsView: View {
 
             Divider()
 
-            TabView {
-                GeneralSettingsTab()
-                    .tabItem { Label("General", systemImage: "gearshape") }
-                CleanupSettingsTab()
-                    .tabItem { Label("Cleanup", systemImage: "sparkles") }
-                ScanningSettingsTab()
-                    .tabItem { Label("Scanning", systemImage: "checkmark.shield") }
-                UpdatesSettingsTab()
-                    .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+            Form {
+                GeneralSettingsSection()
+                CleanupSettingsSection()
+                ScanningSettingsSection()
+                UpdatesSettingsSection()
             }
-            .frame(maxWidth: 560)
+            .formStyle(.grouped)
+            // Long lines of settings text are as hard to read as long lines of
+            // anything else; the form stops widening past the point where they
+            // would be.
+            .frame(maxWidth: 620)
             .frame(maxWidth: .infinity)
-            .padding(Theme.Spacing.l)
         }
     }
 }
 
-private struct GeneralSettingsTab: View {
+private struct GeneralSettingsSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
-        Form {
-            LabeledContent("Folder") {
+        Section("Folder") {
+            LabeledContent("Working folder") {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(model.folder.path)
                         .lineLimit(2)
@@ -59,17 +64,15 @@ private struct GeneralSettingsTab: View {
             }
             Toggle("Skip hidden files", isOn: $model.settings.skipHiddenFiles)
         }
-        .formStyle(.grouped)
-        .padding(.vertical, Theme.Spacing.s)
     }
 }
 
-private struct CleanupSettingsTab: View {
+private struct CleanupSettingsSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
-        Form {
+        Group {
             Section("Installers") {
                 LabeledContent("Consider installers older than") {
                     HStack(spacing: Theme.Spacing.s) {
@@ -126,19 +129,17 @@ private struct CleanupSettingsTab: View {
                 }
             }
         }
-        .formStyle(.grouped)
-        .padding(.vertical, Theme.Spacing.s)
     }
 }
 
-private struct ScanningSettingsTab: View {
+private struct ScanningSettingsSection: View {
     @Environment(AppModel.self) private var model
     @State private var probe = ClamAVAvailability.unknown
     @State private var access = FullDiskAccessStatus.unknown
 
     var body: some View {
         @Bindable var model = model
-        Form {
+        Group {
             Section("Coverage") {
                 LabeledContent("Full Disk Access") {
                     FullDiskAccessLabel(status: access)
@@ -194,8 +195,6 @@ private struct ScanningSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .padding(.vertical, Theme.Spacing.s)
         .task { await refresh() }
     }
 
@@ -215,13 +214,13 @@ private struct ScanningSettingsTab: View {
     }
 }
 
-private struct UpdatesSettingsTab: View {
+private struct UpdatesSettingsSection: View {
     @Environment(AppModel.self) private var model
     @Environment(UpdaterController.self) private var updater
 
     var body: some View {
         @Bindable var model = model
-        Form {
+        Section("Updates") {
             LabeledContent("Version", value: updater.versionString)
             if updater.isConfigured {
                 Toggle("Check for updates automatically", isOn: $model.settings.automaticUpdateChecks)
@@ -239,7 +238,5 @@ private struct UpdatesSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .padding(.vertical, Theme.Spacing.s)
     }
 }

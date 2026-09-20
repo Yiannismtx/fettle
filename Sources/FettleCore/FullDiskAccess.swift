@@ -40,8 +40,16 @@ public enum FullDiskAccess {
     public static func probe(
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> FullDiskAccessStatus {
+        probe(paths: probePaths(home: home))
+    }
+
+    /// The seam the tests drive. `probe(home:)` always consults the
+    /// system-wide TCC database as well as the one in the home folder, which
+    /// means it can't be given a temporary directory and told the truth about
+    /// what's in it — the real `/Library` copy is still there.
+    static func probe(paths: [URL]) -> FullDiskAccessStatus {
         var sawProbeFile = false
-        for url in probePaths(home: home)
+        for url in paths
         where FileManager.default.fileExists(atPath: url.path) {
             sawProbeFile = true
             if let handle = try? FileHandle(forReadingFrom: url) {

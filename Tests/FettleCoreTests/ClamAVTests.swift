@@ -237,7 +237,7 @@ struct ClamAVIntegrationTests {
                 switch update {
                 case .scanned: scanned.withLock { $0 += 1 }
                 case .found: found.withLock { $0 += 1 }
-                case .loadingSignatures, .message: break
+                case .inaccessible, .loadingSignatures, .message: break
                 }
             }
         )
@@ -509,17 +509,24 @@ struct FullDiskAccessTests {
         let folder = try TempFolder()
         // Sending someone to System Settings to fix a permission that was never
         // the problem wastes their time and teaches them to ignore the warning.
-        #expect(FullDiskAccess.probe(home: folder.url) == .unknown)
+        let missing = folder.url.appendingPathComponent("TCC.db")
+        #expect(FullDiskAccess.probe(paths: [missing]) == .unknown)
     }
 
     @Test("A readable probe file means access was granted")
     func readableProbeIsGranted() throws {
         let folder = try TempFolder()
-        let tcc = folder.url.appendingPathComponent("Library/Application Support/com.apple.TCC")
-        try FileManager.default.createDirectory(at: tcc, withIntermediateDirectories: true)
-        try Data("db".utf8).write(to: tcc.appendingPathComponent("TCC.db"))
+        let probe = try folder.write("TCC.db", contents: "db")
+        #expect(FullDiskAccess.probe(paths: [probe]) == .granted)
+    }
 
-        #expect(FullDiskAccess.probe(home: folder.url) == .granted)
+    @Test("Both TCC databases are consulted, not just the one in the home folder")
+    func probesBothDatabases() {
+        let paths = FullDiskAccess.probePaths(
+            home: URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        )
+        #expect(paths.contains { $0.path == "/Users/someone/Library/Application Support/com.apple.TCC/TCC.db" })
+        #expect(paths.contains { $0.path == "/Library/Application Support/com.apple.TCC/TCC.db" })
     }
 
     @Test("A folder scan of somewhere unprotected raises nothing")
