@@ -85,12 +85,18 @@ public struct ClamAVService: Sendable {
         "/usr/bin/clamscan",
     ]
 
-    private static let databaseDirectories = [
-        "/opt/homebrew/var/lib/clamav",
-        "/usr/local/var/lib/clamav",
-        "/opt/local/var/lib/clamav",
-        "/var/lib/clamav",
-    ]
+    private static var databaseDirectories: [String] {
+        var directories = [
+            "/opt/homebrew/var/lib/clamav",
+            "/usr/local/var/lib/clamav",
+            "/opt/local/var/lib/clamav",
+            "/var/lib/clamav",
+        ]
+        if let brew = Homebrew.locate() {
+            directories.append("\(brew.prefix)/var/lib/clamav")
+        }
+        return directories
+    }
 
     private let overridePath: String
 
@@ -105,6 +111,13 @@ public struct ClamAVService: Sendable {
         }
         for path in Self.searchPaths where fm.isExecutableFile(atPath: path) {
             return path
+        }
+        // Whatever Homebrew prefix is actually in use, last: a user with a
+        // custom HOMEBREW_PREFIX would otherwise install ClamAV through Fettle
+        // and still be told it isn't installed.
+        if let brew = Homebrew.locate() {
+            let path = "\(brew.prefix)/bin/clamscan"
+            if fm.isExecutableFile(atPath: path) { return path }
         }
         return nil
     }

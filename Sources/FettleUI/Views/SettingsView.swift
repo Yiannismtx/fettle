@@ -131,7 +131,13 @@ private struct ScanningSettingsTab: View {
                     )
                     .textFieldStyle(.roundedBorder)
                 }
-                Button("Re-check") { Task { await refresh() } }
+                HStack(spacing: Theme.Spacing.m) {
+                    Button("Re-check") { Task { await refresh() } }
+                    if !probe.isUsable {
+                        Button("Install ClamAV…") { model.selection = .scan }
+                            .help("Opens the Malware Scan page, which can install it for you")
+                    }
+                }
             }
             Section("Flagged files") {
                 Picker("Move flagged files to", selection: $model.settings.quarantineInsteadOfTrash) {

@@ -28,6 +28,7 @@ extension Process {
     public static func runCapturing(
         executable: String,
         arguments: [String],
+        environment: [String: String]? = nil,
         timeout: TimeInterval? = nil
     ) async throws -> ProcessResult {
         guard FileManager.default.isExecutableFile(atPath: executable) else {
@@ -37,6 +38,7 @@ extension Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if let environment { process.environment = environment }
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe
@@ -79,6 +81,8 @@ extension Process {
     public static func runStreaming(
         executable: String,
         arguments: [String],
+        environment: [String: String]? = nil,
+        mergeStandardError: Bool = false,
         onStandardOutputLine: @escaping @Sendable (String) -> Void
     ) async throws -> ProcessResult {
         guard FileManager.default.isExecutableFile(atPath: executable) else {
@@ -88,8 +92,13 @@ extension Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if let environment { process.environment = environment }
         let outPipe = Pipe()
-        let errPipe = Pipe()
+        // Tools that narrate their progress — brew and freshclam both do — write
+        // much of it to stderr. When the caller is showing that narration to the
+        // user, both streams have to arrive interleaved in the order they were
+        // written, which means one pipe.
+        let errPipe = mergeStandardError ? outPipe : Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice
@@ -129,7 +138,7 @@ extension Process {
             }
         }
 
-        async let errData = readToEnd(errPipe)
+        async let errData: Data = mergeStandardError ? Data() : readToEnd(errPipe)
 
         await withTaskCancellationHandler {
             await waitForExit(process)

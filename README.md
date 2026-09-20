@@ -39,8 +39,64 @@ design, and trashing one silently breaks whatever project owns it.
 
 - macOS 14 or later
 - Swift 6 toolchain (Xcode 16+) to build
-- `brew install clamav` — only the malware scan needs it; everything else works
-  without it
+- ClamAV — only the malware scan needs it, and **Fettle can install it for
+  you**; see below. Everything else works without it.
+
+## Installing ClamAV
+
+Fettle uses ClamAV's detection engine rather than writing one (see
+[non-goals](#what-it-deliberately-doesnt-do)). ClamAV isn't bundled — that would
+mean shipping a 100 MB+ signature database and an updater for it — so it's a
+one-time install.
+
+### The button
+
+Open **Malware Scan**. If ClamAV isn't there, the page offers to install it and
+runs three things, showing you the output as it goes:
+
+1. `brew install clamav` — a few hundred MB, a few minutes.
+2. **Creates `freshclam.conf`.** Homebrew only installs `freshclam.conf.sample`,
+   and `freshclam` refuses to start until a real config exists with its
+   `Example` line commented out. This is the usual reason a fresh
+   `brew install clamav` looks broken.
+3. `freshclam` — downloads the signature database. Without it the scan runs and
+   matches nothing.
+
+You can cancel at any point, and the rest of Fettle keeps working while it runs.
+
+**Homebrew has to be installed first.** Fettle won't install Homebrew for you:
+its installer needs your administrator password, and it has to ask you for that
+directly rather than through another app. If Homebrew is missing, the page hands
+you the one-line installer to paste into Terminal, with a copy button and a link
+to [brew.sh](https://brew.sh).
+
+### Doing it by hand
+
+Every command the button runs is listed under **Do it manually instead** on the
+same page, with copy buttons. For reference (Apple silicon paths — use
+`/usr/local` on Intel):
+
+```bash
+brew install clamav
+cp /opt/homebrew/etc/clamav/freshclam.conf.sample /opt/homebrew/etc/clamav/freshclam.conf
+sed -i '' 's/^Example$/# Example/' /opt/homebrew/etc/clamav/freshclam.conf
+freshclam
+```
+
+### If Fettle still can't find it
+
+- Fettle looks in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
+  `/usr/bin`, and under whatever `HOMEBREW_PREFIX` is set to. Run
+  `which clamscan`; if it's somewhere else, set the path in
+  **Settings › Scanning**.
+- A GUI app doesn't inherit your shell's `PATH`, so "it works in Terminal" isn't
+  enough on its own — that's why Fettle searches explicitly.
+- **Settings › Scanning › Re-check** re-probes without restarting the app.
+
+### Keeping signatures current
+
+Re-run `freshclam` from time to time. Fettle shows a warning bar when the
+database is more than a week old, and says so if it can't find one at all.
 
 ## Build and run
 

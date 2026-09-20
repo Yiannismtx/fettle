@@ -97,3 +97,32 @@ struct QuarantineModelTests {
         }
     }
 }
+
+@MainActor
+@Suite("ClamAV setup screen")
+struct ClamAVSetupModelTests {
+    @Test("A step that finishes between ticks is still marked done")
+    func fastStepIsNotLeftPending() {
+        let model = ClamAVSetupModel()
+        // Writing freshclam.conf takes milliseconds, so the UI's poll can go
+        // straight from step 1 to step 3 without ever observing step 2.
+        model.completeStepsForTesting(before: .signatures)
+        #expect(model.completedSteps.contains(.install))
+        #expect(model.completedSteps.contains(.configure))
+        #expect(!model.completedSteps.contains(.signatures))
+    }
+
+    @Test("The first step completes nothing ahead of it")
+    func firstStepCompletesNothing() {
+        let model = ClamAVSetupModel()
+        model.completeStepsForTesting(before: .install)
+        #expect(model.completedSteps.isEmpty)
+    }
+
+    @Test("Readiness reflects the machine it's asked about")
+    func readiness() {
+        let model = ClamAVSetupModel()
+        model.refreshReadiness(clamscanOverride: "/tmp/definitely-not-clamscan-\(UUID())")
+        #expect(!model.readiness.hasClamAV)
+    }
+}
