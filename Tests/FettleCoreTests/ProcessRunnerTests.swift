@@ -25,24 +25,28 @@ struct ProcessStreamingTests {
             echo "second"
             """)
 
-        let firstLineDelay = Locked<TimeInterval?>(nil)
-        let started = Date()
+        let firstLineAt = Locked<Date?>(nil)
         let result = try await Process.runStreaming(
             executable: path,
             arguments: [],
             usePseudoTerminal: true,
             onStandardOutputLine: { line in
                 guard line == "first" else { return }
-                firstLineDelay.withLock { $0 = Date().timeIntervalSince(started) }
+                firstLineAt.withLock { $0 = Date() }
             }
         )
+        let finishedAt = Date()
 
         #expect(result.exitCode == 0)
-        let delay = firstLineDelay.withLock { $0 }
-        #expect(delay != nil, "the first line never arrived")
-        // Well inside the child's sleep, with enough slack that a loaded
-        // machine running the rest of the suite alongside it doesn't fail.
-        #expect((delay ?? .infinity) < 1.5, "first line after \(delay ?? -1)s")
+        guard let arrived = firstLineAt.withLock({ $0 }) else {
+            Issue.record("the first line never arrived")
+            return
+        }
+        // Measured backwards from the end rather than forwards from the start:
+        // how long the child took to launch varies with what else the machine
+        // is doing, but the gap it sleeps for does not.
+        let lead = finishedAt.timeIntervalSince(arrived)
+        #expect(lead > 2, "the first line only arrived \(lead)s before the process exited")
     }
 
     @Test("Carriage-return updates arrive as separate lines")
