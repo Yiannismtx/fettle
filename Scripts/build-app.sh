@@ -33,10 +33,22 @@ else
   BUILD="1"
 fi
 
-# Optional release configuration, supplied by the environment so no key material
-# ever lands in the repository.
+# Update configuration.
+#
+# The public key lives in the repository on purpose: it is public by design —
+# it gets embedded in every build so the app can verify that an update was
+# signed by the matching private key. Only the private key is secret, and that
+# never leaves the login keychain. Both can still be overridden by the
+# environment for a one-off build.
 FEED_URL="${FETTLE_FEED_URL:-https://raw.githubusercontent.com/Yiannismtx/fettle/main/appcast.xml}"
 ED_PUBLIC_KEY="${FETTLE_ED_PUBLIC_KEY:-}"
+if [ -z "$ED_PUBLIC_KEY" ] && [ -f "$ROOT/Sparkle/public-key.txt" ]; then
+  ED_PUBLIC_KEY="$(tr -d '[:space:]' < "$ROOT/Sparkle/public-key.txt")"
+fi
+if [ -z "$ED_PUBLIC_KEY" ]; then
+  echo "    (no signing key yet — building without an update feed."
+  echo "     Run Scripts/setup-updates.sh once to enable auto-update.)"
+fi
 
 echo "==> Building Fettle $VERSION ($BUILD), $CONFIG"
 swift build "${SWIFT_FLAGS[@]}" -c "$CONFIG" --product Fettle

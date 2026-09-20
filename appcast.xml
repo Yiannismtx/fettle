@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fettle's update feed.
+
+  Empty until the first release. Sparkle treats a feed with no items as
+  "you're up to date", so this file existing from the start is what stops the
+  app's first update check from failing on a 404.
+
+  Scripts/release.sh adds an entry here for each release, newest first.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Fettle</title>
+        <description>Updates for Fettle</description>
+        <language>en</language>
+    </channel>
+</rss>

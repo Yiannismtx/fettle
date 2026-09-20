@@ -143,32 +143,53 @@ Then point Fettle at it with **Choose Folder…**.
 
 ## Releasing
 
-Auto-update runs on [Sparkle](https://sparkle-project.org). One-time setup:
+Auto-update runs on [Sparkle](https://sparkle-project.org).
 
-1. Generate an EdDSA key pair. Sparkle's tool comes down with the package:
-   ```bash
-   find ~/Library/Caches/dev.fettle.build -name generate_keys -exec {} \;
-   ```
-   The private key goes into your login keychain; the public key is printed.
-2. Put these in your shell profile:
-   ```bash
-   export FETTLE_ED_PUBLIC_KEY="<the printed public key>"
-   export FETTLE_FEED_URL="https://raw.githubusercontent.com/Yiannismtx/fettle/main/appcast.xml"
-   ```
-
-Then, per release: bump `VERSION`, and run
+### One-time setup
 
 ```bash
+Scripts/setup-updates.sh
+```
+
+That generates the EdDSA signing key pair and writes the public half to
+`Sparkle/public-key.txt`. Re-running it is safe: if a key already exists in
+your keychain it is reused, never replaced. Sparkle needs only one signing key
+however many apps you use it in.
+
+**The public key belongs in the repository.** It is embedded in every build so
+the app can verify that an update was signed by the matching private key —
+publishing it is the point. Only the private key is secret, and it stays in
+your login keychain; none of these scripts ever read it, `sign_update` does the
+signing.
+
+Back the private key up if you care about shipping updates after a disk
+failure — losing it means existing installs can never accept another update:
+
+```bash
+$(find ~/Library/Caches/dev.fettle.build -name generate_keys | head -1) -x fettle-private-key.txt
+```
+
+Store that file somewhere safe, then delete it from disk.
+
+### Each release
+
+```bash
+# bump VERSION first
 Scripts/release.sh "What changed in this version"
 ```
 
-It builds, zips, signs the zip with the key from your keychain, and adds an
-entry to `appcast.xml`. Upload the zip to the matching GitHub release, then
-commit and push `appcast.xml`.
+It builds, zips with `ditto`, signs the zip with the key from your keychain,
+and adds an entry to `appcast.xml`. Then:
 
-Builds without `FETTLE_ED_PUBLIC_KEY` simply ship without a feed — Sparkle
-refuses to run with an empty key, so the app reports updates as unconfigured
-rather than failing at launch.
+1. Create a GitHub release tagged `v<VERSION>` and upload `dist/Fettle-<VERSION>.zip` to it.
+2. Commit and push `appcast.xml`.
+
+The feed is `appcast.xml` served from the repo's `main` branch, so pushing it is
+what publishes the update. Override with `FETTLE_FEED_URL` if you move it.
+
+A build with no key in `Sparkle/public-key.txt` simply ships without a feed and
+says so — Sparkle refuses to run with an empty key, so the app reports updates
+as unconfigured rather than failing at launch.
 
 ## Layout
 

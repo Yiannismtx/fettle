@@ -5,17 +5,10 @@
 #
 #   Scripts/release.sh "What changed in this version"
 #
-# Requires, once:
-#   1. An EdDSA key pair. Sparkle ships `generate_keys`; find it with
-#        find ~/Library/Caches/dev.fettle.build -name generate_keys
-#      Run it — the private key goes into your login keychain, and it prints the
-#      public key.
-#   2. export FETTLE_ED_PUBLIC_KEY="<the printed public key>"
-#      export FETTLE_FEED_URL="https://raw.githubusercontent.com/<you>/fettle/main/appcast.xml"
-#      Put those in your shell profile so every build carries them.
+# Requires, once: Scripts/setup-updates.sh, which generates the signing key.
 #
-# The private key never leaves the keychain and is never read by this script —
-# `sign_update` does the signing.
+# The private key never leaves the login keychain and is never read by this
+# script — `sign_update` does the signing.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$FETTLE_ROOT"
@@ -24,9 +17,9 @@ NOTES="${1:-}"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD="$(git rev-list --count HEAD)"
 
-if [ -z "${FETTLE_ED_PUBLIC_KEY:-}" ]; then
-  echo "!! FETTLE_ED_PUBLIC_KEY isn't set — the build would ship without an update feed." >&2
-  echo "   See the comment at the top of this script." >&2
+if [ -z "${FETTLE_ED_PUBLIC_KEY:-}" ] && [ ! -f "$FETTLE_ROOT/Sparkle/public-key.txt" ]; then
+  echo "!! No signing key yet, so this build would ship without an update feed." >&2
+  echo "   Run Scripts/setup-updates.sh once, then try again." >&2
   exit 1
 fi
 
