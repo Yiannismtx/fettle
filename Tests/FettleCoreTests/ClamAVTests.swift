@@ -371,3 +371,187 @@ struct QuarantineTests {
         #expect(!path.contains(".Trash"))
     }
 }
+
+/// clamscan does not treat "macOS wouldn't let me read that" as a failure. It
+/// prints a line, carries on, and exits with the same code and the same
+/// "Infected files: 0" summary it would print after reading everything. These
+/// tests pin the one signal that tells the two apart.
+@Suite("Refused paths")
+struct ClamAVRefusalTests {
+    @Test("An access-denied line is not counted as a file that came back clean")
+    func deniedIsNotClean() {
+        let line = "/Users/me/Documents: Access denied."
+        #expect(
+            ClamAVService.parseScanResult(line: line)?.url == nil,
+            "a folder macOS locked us out of was counted as scanned and clean"
+        )
+        #expect(ClamAVService.parseFinding(line: line) == nil)
+    }
+
+    @Test("Each way clamscan reports a refusal yields the path")
+    func refusalForms() {
+        let cases = [
+            "/Users/me/Documents: Access denied.",
+            "/Users/me/Library/Mail: Permission denied",
+            "ERROR: Can't open directory /Users/me/Desktop",
+            "ERROR: Can't access file /Users/me/Downloads/a.dmg",
+            "WARNING: Can't open file /Users/me/Pictures/b.heic: Permission denied",
+        ]
+        for line in cases {
+            let refusal = ClamAVService.parseInaccessible(line: line)
+            #expect(refusal?.url != nil, "\(line) was not recognised as a refusal")
+            #expect(refusal?.url.path.hasPrefix("/Users/me") == true, "wrong path from: \(line)")
+        }
+    }
+
+    @Test("An ordinary result is not mistaken for a refusal")
+    func cleanResultsAreNotRefusals() {
+        for line in [
+            "/Users/me/Downloads/ok.txt: OK",
+            "/Users/me/Downloads/e.txt: Empty file",
+            "/Users/me/Downloads/bad.exe: Win.Test.EICAR_HDB-1 FOUND",
+            "Scanned files: 412",
+            "----------- SCAN SUMMARY -----------",
+            "",
+        ] {
+            #expect(
+                ClamAVService.parseInaccessible(line: line)?.url == nil,
+                "\(line) was reported as a refusal"
+            )
+        }
+    }
+
+    @Test("A hit is still a hit even when other paths were refused")
+    func refusalsDoNotSuppressFindings() {
+        let hit = ClamAVService.parseScanResult(
+            line: "/Users/me/Downloads/bad.exe: Win.Test.EICAR_HDB-1 FOUND"
+        )
+        #expect(hit?.finding?.signature == "Win.Test.EICAR_HDB-1")
+    }
+
+    @Test("A path containing a colon survives the reason being split off")
+    func awkwardPathsParse() {
+        let refusal = ClamAVService.parseInaccessible(
+            line: "ERROR: Can't open directory /Users/me/notes: drafts"
+        )
+        // The tail isn't a path, so it reads as the reason — which is the right
+        // guess far more often than the alternative, and never loses the
+        // leading directory either way.
+        #expect(refusal?.url.path == "/Users/me/notes")
+    }
+}
+
+@Suite("Counting across many roots")
+struct ClamAVCountingTests {
+    @Test("Several folders are counted as one total")
+    func countsAcrossRoots() throws {
+        let folder = try TempFolder()
+        let first = try folder.makeDirectory("one")
+        let second = try folder.makeDirectory("two")
+        try Data("a".utf8).write(to: first.appendingPathComponent("a.txt"))
+        try Data("b".utf8).write(to: second.appendingPathComponent("b.txt"))
+        try Data("c".utf8).write(to: second.appendingPathComponent("c.txt"))
+
+        #expect(ClamAVService.countScannableFiles(in: [first, second]) == 3)
+    }
+
+    @Test("Excluded directories are left out of the denominator as well as the scan")
+    func exclusionsApplyToTheCount() throws {
+        let folder = try TempFolder()
+        let kept = try folder.makeDirectory("keep")
+        let skipped = try folder.makeDirectory("keep/skipme")
+        try Data("a".utf8).write(to: kept.appendingPathComponent("a.txt"))
+        for index in 0..<5 {
+            try Data("x".utf8).write(to: skipped.appendingPathComponent("\(index).bin"))
+        }
+
+        // Counting files the scan will skip would leave the bar stuck partway
+        // through a scan that had actually finished.
+        let total = ClamAVService.countScannableFiles(
+            in: [kept], excluding: ["/skipme($|/)"]
+        )
+        #expect(total == 1)
+    }
+
+    @Test("The running total is reported while the walk is still going")
+    func countingReportsProgress() throws {
+        let folder = try TempFolder()
+        for index in 0..<2_000 { try folder.write("f\(index).txt") }
+
+        let reports = Locked([Int]())
+        let total = ClamAVService.countScannableFiles(
+            in: [folder.url],
+            onCount: { running in reports.withLock { $0.append(running) } }
+        )
+
+        #expect(total == 2_000)
+        // On a full system scan this walk runs for minutes. Without a number
+        // that visibly climbs, "Preparing to scan" is indistinguishable from
+        // a hang.
+        #expect(reports.withLock { $0.count } > 1, "the count never reported progress")
+        #expect(reports.withLock { $0.last } == 2_000)
+    }
+
+    @Test("A missing root is skipped rather than failing the whole count")
+    func missingRootIsTolerated() throws {
+        let folder = try TempFolder()
+        try folder.write("a.txt")
+        let missing = folder.url.appendingPathComponent("nope")
+
+        #expect(ClamAVService.countScannableFiles(in: [folder.url, missing]) == 1)
+    }
+}
+
+@Suite("Full Disk Access")
+struct FullDiskAccessTests {
+    @Test("A missing probe file is reported as unknown, not as a denial")
+    func missingProbeIsUnknown() throws {
+        let folder = try TempFolder()
+        // Sending someone to System Settings to fix a permission that was never
+        // the problem wastes their time and teaches them to ignore the warning.
+        #expect(FullDiskAccess.probe(home: folder.url) == .unknown)
+    }
+
+    @Test("A readable probe file means access was granted")
+    func readableProbeIsGranted() throws {
+        let folder = try TempFolder()
+        let tcc = folder.url.appendingPathComponent("Library/Application Support/com.apple.TCC")
+        try FileManager.default.createDirectory(at: tcc, withIntermediateDirectories: true)
+        try Data("db".utf8).write(to: tcc.appendingPathComponent("TCC.db"))
+
+        #expect(FullDiskAccess.probe(home: folder.url) == .granted)
+    }
+
+    @Test("A folder scan of somewhere unprotected raises nothing")
+    func noAdviceForAnOrdinaryFolderScan() {
+        let plan = MalwareScanPlan.folder(URL(fileURLWithPath: "/Users/me/Projects"))
+        #expect(FullDiskAccess.advice(for: plan, status: .denied, blocked: []) == nil)
+        #expect(FullDiskAccess.advice(for: plan, status: .granted, blocked: []) == nil)
+    }
+
+    @Test("Blocked locations are named, not counted")
+    func adviceNamesTheBlockedFolders() {
+        let plan = MalwareScanPlan.quick()
+        let blocked = [
+            ScanLocation(url: URL(fileURLWithPath: "/a"), label: "Documents", reason: ""),
+            ScanLocation(url: URL(fileURLWithPath: "/b"), label: "Mail", reason: ""),
+        ]
+        let advice = FullDiskAccess.advice(for: plan, status: .denied, blocked: blocked)
+
+        // "Two locations were blocked" is a shrug. Naming them is something
+        // the reader can act on.
+        #expect(advice?.contains("Documents") == true)
+        #expect(advice?.contains("Mail") == true)
+    }
+
+    @Test("A long list of blocked folders is summarised rather than run on")
+    func adviceTruncatesLongLists() {
+        let blocked = (0..<6).map {
+            ScanLocation(url: URL(fileURLWithPath: "/\($0)"), label: "Folder\($0)", reason: "")
+        }
+        let advice = FullDiskAccess.advice(
+            for: .fullSystem(), status: .denied, blocked: blocked
+        )
+        #expect(advice?.contains("3 more") == true)
+    }
+}

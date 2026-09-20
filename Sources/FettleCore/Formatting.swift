@@ -31,4 +31,16 @@ public enum Formatting {
         let word = value == 1 ? singular : (plural ?? singular + "s")
         return "\(value) \(word)"
     }
+
+    /// "Mail", "Mail and Messages", "Desktop, Mail and Messages" — the Oxford
+    /// comma left out deliberately, to match how macOS itself writes lists.
+    public static func list(_ items: [String]) -> String {
+        switch items.count {
+        case 0: return ""
+        case 1: return items[0]
+        case 2: return "\(items[0]) and \(items[1])"
+        default:
+            return "\(items.dropLast().joined(separator: ", ")) and \(items[items.count - 1])"
+        }
+    }
 }

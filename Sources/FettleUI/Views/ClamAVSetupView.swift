@@ -10,6 +10,7 @@ import FettleCore
 /// own installer needs an admin password, which it must ask for itself — it
 /// says so plainly and hands over exact, copyable commands.
 struct ClamAVSetupView: View {
+    @Environment(AppModel.self) private var app
     /// Non-nil when clamscan was found but wouldn't run.
     let brokenReason: String?
     let clamscanOverride: String
@@ -127,9 +128,18 @@ struct ClamAVSetupView: View {
                         .disabled(model.readiness.hasClamAV && model.phase == .idle)
 
                         if model.readiness.hasClamAV {
-                            Text("Already installed — use Re-check in Settings if the scan still can't find it.")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text("Already installed — if the scan still can't find it, re-check from Settings › Scanning.")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button {
+                                    app.selection = .settings
+                                } label: {
+                                    Label("Open Settings", systemImage: "gearshape")
+                                }
+                                .controlSize(.small)
+                            }
                         }
                         Spacer(minLength: 0)
                     }
@@ -299,6 +309,7 @@ private struct InstallLogView: View {
 /// run it themselves, or needs to debug it when it goes wrong.
 private struct ManualInstructions: View {
     let prefix: String
+    @Environment(AppModel.self) private var app
     @State private var isExpanded = false
 
     var body: some View {
@@ -334,9 +345,17 @@ private struct ManualInstructions: View {
                 Step(
                     number: 4,
                     title: "Point Fettle at it, if needed",
-                    note: "Fettle looks in \(prefix)/bin and the other standard locations. If your clamscan lives somewhere else, set the path in Settings › Scanning."
+                    note: "Fettle looks in \(prefix)/bin and the other standard locations. If your clamscan lives somewhere else, paste the path into Settings › Scanning."
                 ) {
                     CommandRow(command: "which clamscan", note: "prints the path to use")
+                    // A step that ends by naming a window the reader has no way
+                    // to open is a step that doesn't finish.
+                    Button {
+                        app.selection = .settings
+                    } label: {
+                        Label("Open Settings › Scanning", systemImage: "gearshape")
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(.top, Theme.Spacing.s)

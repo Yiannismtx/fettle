@@ -27,6 +27,7 @@ struct RootView: View {
         case .organize: OrganizeView()
         case .scan: MalwareScanView()
         case .quarantine: QuarantineView()
+        case .settings: SettingsView()
         }
     }
 }
@@ -68,23 +69,49 @@ private struct FolderToolbar: ToolbarContent {
                     model.chooseFolder(url)
                 }
             } label: {
-                Label("Choose Folder…", systemImage: "folder.badge.gearshape")
+                // Plain folder, not folder.badge.gearshape: that symbol reads
+                // as "folder settings", which this button isn't, and sitting
+                // next to the real Settings gear it made both of them vaguer.
+                Label("Choose Folder…", systemImage: "folder")
             }
             .help("Point Fettle at a different folder")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            // Settings is a page in this window, not a separate one, so this
+            // navigates rather than opening anything. A second window showing
+            // the same form is a second place for the app's state to live and
+            // one more thing to close.
+            Button {
+                model.selection = .settings
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .help("Thresholds, scanning, and updates (⌘,)")
+            .disabled(model.selection == .settings)
         }
     }
 }
 
 enum FolderPicker {
+    /// `message` and `prompt` are parameters because the same panel is used to
+    /// pick the folder Fettle tidies and to pick a one-off folder to scan for
+    /// malware, and telling somebody they are choosing a folder "to clean up"
+    /// when they asked to scan one is a small lie the panel doesn't need to
+    /// tell.
     @MainActor
-    static func choose(startingAt url: URL, completion: @escaping (URL) -> Void) {
+    static func choose(
+        startingAt url: URL,
+        message: String = "Choose the folder Fettle should clean up.",
+        prompt: String = "Use Folder",
+        completion: @escaping (URL) -> Void
+    ) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.directoryURL = url
-        panel.prompt = "Use Folder"
-        panel.message = "Choose the folder Fettle should clean up."
+        panel.prompt = prompt
+        panel.message = message
         if panel.runModal() == .OK, let picked = panel.url {
             completion(picked)
         }

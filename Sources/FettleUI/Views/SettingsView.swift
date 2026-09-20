@@ -1,19 +1,37 @@
 import SwiftUI
+import AppKit
 import FettleCore
 
+/// Settings, rendered as a page in the main window rather than in a Settings
+/// scene of its own.
+///
+/// It carries the same header as every other page so it reads as part of the
+/// app rather than as a dialog that wandered in, and the form is held to a
+/// readable width instead of stretching across a wide window.
 struct SettingsView: View {
     var body: some View {
-        TabView {
-            GeneralSettingsTab()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            CleanupSettingsTab()
-                .tabItem { Label("Cleanup", systemImage: "sparkles") }
-            ScanningSettingsTab()
-                .tabItem { Label("Scanning", systemImage: "checkmark.shield") }
-            UpdatesSettingsTab()
-                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        VStack(spacing: 0) {
+            PageHeader(
+                title: "Settings",
+                subtitle: "What the other pages do, and how"
+            ) {}
+
+            Divider()
+
+            TabView {
+                GeneralSettingsTab()
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                CleanupSettingsTab()
+                    .tabItem { Label("Cleanup", systemImage: "sparkles") }
+                ScanningSettingsTab()
+                    .tabItem { Label("Scanning", systemImage: "checkmark.shield") }
+                UpdatesSettingsTab()
+                    .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+            }
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Spacing.l)
         }
-        .frame(width: 520)
     }
 }
 
@@ -116,10 +134,36 @@ private struct CleanupSettingsTab: View {
 private struct ScanningSettingsTab: View {
     @Environment(AppModel.self) private var model
     @State private var probe = ClamAVAvailability.unknown
+    @State private var access = FullDiskAccessStatus.unknown
 
     var body: some View {
         @Bindable var model = model
         Form {
+            Section("Coverage") {
+                LabeledContent("Full Disk Access") {
+                    FullDiskAccessLabel(status: access)
+                }
+                HStack(spacing: Theme.Spacing.m) {
+                    Button("Re-check") { Task { await refresh() } }
+                    if access != .granted {
+                        Button("Open System Settings") {
+                            NSWorkspace.shared.open(FullDiskAccess.settingsPaneURL)
+                        }
+                        .help("Privacy & Security › Full Disk Access")
+                    }
+                }
+            }
+            Section("Malware scan") {
+                Picker("Opens with", selection: $model.settings.lastMalwareScanKind) {
+                    ForEach(MalwareScanKind.allCases) { kind in
+                        Text(kind.title).tag(kind.rawValue)
+                    }
+                }
+                Text(scanKindSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("ClamAV") {
                 LabeledContent("Status") {
                     ClamAVStatusLabel(availability: probe)
@@ -155,8 +199,19 @@ private struct ScanningSettingsTab: View {
         .task { await refresh() }
     }
 
+    /// What the currently chosen scan actually covers.
+    ///
+    /// Picking between three names is only a choice if the names mean
+    /// something, and "Quick" on its own doesn't say what it skips.
+    private var scanKindSummary: String {
+        let kind = MalwareScanKind(rawValue: model.settings.lastMalwareScanKind) ?? .quick
+        return "\(kind.summary) \(kind.expectedDuration). "
+            + "Running a different scan makes that one the new default."
+    }
+
     private func refresh() async {
         probe = await ClamAVService(overridePath: model.settings.clamscanPathOverride).probe()
+        access = await Task.detached(priority: .utility) { FullDiskAccess.probe() }.value
     }
 }
 

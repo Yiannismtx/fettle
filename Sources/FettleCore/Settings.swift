@@ -30,6 +30,10 @@ public struct FettleSettings: Codable, Equatable, Sendable {
     /// The page that was open when the app last quit, so it reopens where the
     /// user left off instead of always resetting to Overview.
     public var lastDestination: String
+    /// Which malware scan the user ran last: quick, folder, or full system.
+    /// Reaching for the same scan twice is the common case, and re-picking it
+    /// on every launch is a small tax on the thing people do most.
+    public var lastMalwareScanKind: String
 
     public static let `default` = FettleSettings(
         installerAgeThresholdDays: 30,
@@ -41,7 +45,8 @@ public struct FettleSettings: Codable, Equatable, Sendable {
         quarantineInsteadOfTrash: true,
         clamscanPathOverride: "",
         automaticUpdateChecks: true,
-        lastDestination: ""
+        lastDestination: "",
+        lastMalwareScanKind: MalwareScanKind.quick.rawValue
     )
 
     public init(
@@ -54,7 +59,8 @@ public struct FettleSettings: Codable, Equatable, Sendable {
         quarantineInsteadOfTrash: Bool,
         clamscanPathOverride: String,
         automaticUpdateChecks: Bool,
-        lastDestination: String = ""
+        lastDestination: String = "",
+        lastMalwareScanKind: String = MalwareScanKind.quick.rawValue
     ) {
         self.installerAgeThresholdDays = installerAgeThresholdDays
         self.requireMatchingInstalledApp = requireMatchingInstalledApp
@@ -66,6 +72,70 @@ public struct FettleSettings: Codable, Equatable, Sendable {
         self.clamscanPathOverride = clamscanPathOverride
         self.automaticUpdateChecks = automaticUpdateChecks
         self.lastDestination = lastDestination
+        self.lastMalwareScanKind = lastMalwareScanKind
+    }
+
+    /// Decoded field by field, each one falling back to its default.
+    ///
+    /// Settings are stored as a single JSON blob, and Swift's synthesised
+    /// decoder throws `keyNotFound` for any key the stored blob lacks —
+    /// declaring a default value on the property does not change that. Since
+    /// `SettingsStore.load` treats a decode failure as "no settings", every
+    /// field added in a new version would otherwise reset every *other*
+    /// preference the first time the upgraded build read the file: the folder
+    /// you chose, your installer threshold, your clamscan path, all silently
+    /// back to stock. Writing the decoder out makes a missing key mean "this
+    /// version didn't have that setting" instead.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = FettleSettings.default
+        installerAgeThresholdDays = try container.decodeIfPresent(
+            Int.self, forKey: .installerAgeThresholdDays
+        ) ?? fallback.installerAgeThresholdDays
+        requireMatchingInstalledApp = try container.decodeIfPresent(
+            Bool.self, forKey: .requireMatchingInstalledApp
+        ) ?? fallback.requireMatchingInstalledApp
+        duplicateMinimumBytes = try container.decodeIfPresent(
+            Int.self, forKey: .duplicateMinimumBytes
+        ) ?? fallback.duplicateMinimumBytes
+        skipHiddenFiles = try container.decodeIfPresent(
+            Bool.self, forKey: .skipHiddenFiles
+        ) ?? fallback.skipHiddenFiles
+        scanFolderPath = try container.decodeIfPresent(
+            String.self, forKey: .scanFolderPath
+        ) ?? fallback.scanFolderPath
+        scanFolderBookmark = try container.decodeIfPresent(
+            Data.self, forKey: .scanFolderBookmark
+        )
+        quarantineInsteadOfTrash = try container.decodeIfPresent(
+            Bool.self, forKey: .quarantineInsteadOfTrash
+        ) ?? fallback.quarantineInsteadOfTrash
+        clamscanPathOverride = try container.decodeIfPresent(
+            String.self, forKey: .clamscanPathOverride
+        ) ?? fallback.clamscanPathOverride
+        automaticUpdateChecks = try container.decodeIfPresent(
+            Bool.self, forKey: .automaticUpdateChecks
+        ) ?? fallback.automaticUpdateChecks
+        lastDestination = try container.decodeIfPresent(
+            String.self, forKey: .lastDestination
+        ) ?? fallback.lastDestination
+        lastMalwareScanKind = try container.decodeIfPresent(
+            String.self, forKey: .lastMalwareScanKind
+        ) ?? fallback.lastMalwareScanKind
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case installerAgeThresholdDays
+        case requireMatchingInstalledApp
+        case duplicateMinimumBytes
+        case skipHiddenFiles
+        case scanFolderPath
+        case scanFolderBookmark
+        case quarantineInsteadOfTrash
+        case clamscanPathOverride
+        case automaticUpdateChecks
+        case lastDestination
+        case lastMalwareScanKind
     }
 
     /// Clamp values that would make the app behave nonsensically if a stale or
@@ -74,6 +144,9 @@ public struct FettleSettings: Codable, Equatable, Sendable {
         var copy = self
         copy.installerAgeThresholdDays = max(0, min(3650, installerAgeThresholdDays))
         copy.duplicateMinimumBytes = max(0, duplicateMinimumBytes)
+        if MalwareScanKind(rawValue: lastMalwareScanKind) == nil {
+            copy.lastMalwareScanKind = MalwareScanKind.quick.rawValue
+        }
         return copy
     }
 }
