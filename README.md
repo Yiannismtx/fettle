@@ -4,7 +4,7 @@
 
 A native macOS utility for the Downloads folder. It clears out dead-weight
 installers, finds duplicate files by content, sorts what's left into type
-folders, and runs an on-demand malware scan through ClamAV.
+folders, and runs on-demand malware scans through ClamAV.
 
 **Nothing in Fettle deletes permanently.** Every destructive path ends at the
 Trash or a quarantine folder, and every batch is reviewed and approved before it
@@ -19,7 +19,7 @@ permanent-delete API on it at all.
 | **Installers** | `.dmg`/`.pkg`/`.iso` files past an age threshold you set, fuzzy-matched against `/Applications` so you can see which ones you've already installed from. |
 | **Duplicates** | Byte-identical files found by SHA-256, so it catches the same file saved under two unrelated names. Keeps the oldest copy; you can override which one stays. |
 | **Organize** | Sorts loose top-level files into Images / Documents / Archives / Installers / Other. Never overwrites: a name that's taken gets numbered. |
-| **Malware Scan** | Hands the folder to ClamAV's `clamscan` and reports what it flags. Flagged files go to quarantine or the Trash — never deleted, never acted on without you. |
+| **Malware Scan** | Three scans through ClamAV's `clamscan`: **Quick** over the folders malware arrives and hides in, **Folder** over one folder you pick, and **Full System** over the whole startup disk. Flagged files go to quarantine or the Trash — never deleted, never acted on without you. |
 | **Quarantine** | What a scan moved aside, what matched it, and a Put Back button. A signature match isn't proof, so the most consequential action in the app is also the one with an undo. |
 
 ### What it deliberately doesn't do
@@ -28,6 +28,10 @@ permanent-delete API on it at all.
   company's job. Fettle wraps ClamAV and never passes it `--remove` or `--move`.
 - **No real-time scanning.** That needs Apple's Endpoint Security entitlement,
   which is out of scope for a personal on-demand tool.
+- **No clean bill of health it didn't earn.** clamscan reports a folder macOS
+  wouldn't let it open exactly as it reports an empty one, and exits zero
+  either way. Fettle probes each location itself and says what was blocked
+  rather than passing the silence on as "nothing found".
 - **No permanent deletion, anywhere.**
 - **No date-based folders** in the organizer — type only.
 
@@ -41,6 +45,33 @@ design, and trashing one silently breaks whatever project owns it.
 - Swift 6 toolchain (Xcode 16+) to build
 - ClamAV — only the malware scan needs it, and **Fettle can install it for
   you**; see below. Everything else works without it.
+
+## The three scans
+
+| Scan | Covers | Roughly |
+|---|---|---|
+| **Quick** | Downloads, `/Applications`, the LaunchAgents and LaunchDaemons folders, Application Support, Internet Plug-ins, `/private/tmp` — where Mac malware arrives and where it arranges to be run again. Skips iOS device backups. | Minutes |
+| **Folder** | One folder and everything inside it. Defaults to the folder Fettle is pointed at; **Choose…** picks a different one for this scan only, without repointing the rest of the app. | Depends |
+| **Full System** | The whole startup disk. | Hours |
+
+The exact list of folders is shown on the page before the scan starts, each with
+the reason it's there. A scan that claims coverage should be able to show its
+working.
+
+**Full System excludes** the sealed system volume (macOS verifies it itself, and
+`/System/Volumes/Data` firmlinks back to the disk already being walked — leaving
+it in scans everything twice), device nodes, `/Volumes`, the autofs trigger
+paths `/net` and `/home`, virtual memory, and the per-user cache tree. The
+temp tree is deliberately kept: it's a real staging ground for droppers.
+
+### Full Disk Access
+
+macOS refuses reads on Desktop, Documents, Downloads, Mail and Messages for an
+app without Full Disk Access — and `clamscan` inherits that refusal, reports
+those folders as scanned, and exits clean. Fettle checks each location itself
+before scanning, names the ones that were blocked, and offers a button that
+opens the right System Settings pane. A result that couldn't read everything
+says so instead of claiming nothing was found.
 
 ## Installing ClamAV
 

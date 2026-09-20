@@ -42,7 +42,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .installers: return "Dead-weight .dmg and .pkg files"
         case .duplicates: return "Identical files, matched by content"
         case .organize: return "Sort loose files into type folders"
-        case .scan: return "On-demand ClamAV scan"
+        case .scan: return "Quick, folder, or whole-disk scan"
         case .quarantine: return "Files a scan moved aside, and how to undo that"
         }
     }

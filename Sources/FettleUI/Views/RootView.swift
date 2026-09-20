@@ -76,15 +76,25 @@ private struct FolderToolbar: ToolbarContent {
 }
 
 enum FolderPicker {
+    /// `message` and `prompt` are parameters because the same panel is used to
+    /// pick the folder Fettle tidies and to pick a one-off folder to scan for
+    /// malware, and telling somebody they are choosing a folder "to clean up"
+    /// when they asked to scan one is a small lie the panel doesn't need to
+    /// tell.
     @MainActor
-    static func choose(startingAt url: URL, completion: @escaping (URL) -> Void) {
+    static func choose(
+        startingAt url: URL,
+        message: String = "Choose the folder Fettle should clean up.",
+        prompt: String = "Use Folder",
+        completion: @escaping (URL) -> Void
+    ) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.directoryURL = url
-        panel.prompt = "Use Folder"
-        panel.message = "Choose the folder Fettle should clean up."
+        panel.prompt = prompt
+        panel.message = message
         if panel.runModal() == .OK, let picked = panel.url {
             completion(picked)
         }

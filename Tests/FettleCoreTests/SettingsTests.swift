@@ -88,4 +88,43 @@ struct FolderAccessTests {
         let resolved = FolderAccess.resolve(path: "~/Downloads", bookmark: nil)
         #expect(resolved.url.path == FolderAccess.defaultFolder.path)
     }
+
+    @Test("A settings file written before a field existed keeps everything else")
+    func olderStoredSettingsSurviveANewField() throws {
+        let defaults = makeDefaults()
+        let store = SettingsStore(defaults: defaults)
+
+        // Exactly what an older build wrote: no lastMalwareScanKind key at all.
+        // Settings live in one JSON blob, so a decoder that threw on the
+        // missing key would silently reset every other preference the moment
+        // an upgraded build read the file.
+        let older = """
+            {
+              "installerAgeThresholdDays": 90,
+              "requireMatchingInstalledApp": true,
+              "duplicateMinimumBytes": 4096,
+              "skipHiddenFiles": true,
+              "scanFolderPath": "/Users/me/Downloads",
+              "quarantineInsteadOfTrash": false,
+              "clamscanPathOverride": "/opt/homebrew/bin/clamscan",
+              "automaticUpdateChecks": true
+            }
+            """
+        defaults.set(Data(older.utf8), forKey: "com.fettle.settings.v1")
+
+        let loaded = store.load()
+        #expect(loaded.installerAgeThresholdDays == 90)
+        #expect(loaded.duplicateMinimumBytes == 4096)
+        #expect(loaded.clamscanPathOverride == "/opt/homebrew/bin/clamscan")
+        #expect(loaded.quarantineInsteadOfTrash == false)
+        // The new field takes its default rather than taking the file with it.
+        #expect(loaded.lastMalwareScanKind == MalwareScanKind.quick.rawValue)
+    }
+
+    @Test("A scan type the app no longer knows about falls back to Quick")
+    func unknownScanKindIsNormalised() {
+        var settings = FettleSettings.default
+        settings.lastMalwareScanKind = "psychic"
+        #expect(settings.normalized().lastMalwareScanKind == MalwareScanKind.quick.rawValue)
+    }
 }
