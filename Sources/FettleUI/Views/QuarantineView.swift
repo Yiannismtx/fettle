@@ -30,8 +30,7 @@ struct QuarantineView: View {
             Divider()
 
             if model.isLoading && model.items.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                LoadingIndicator(label: "Reading the quarantine folder…")
             } else if model.items.isEmpty {
                 EmptyStateView(
                     systemImage: "lock.open.rotation",

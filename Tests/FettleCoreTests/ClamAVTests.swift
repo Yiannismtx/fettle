@@ -31,6 +31,86 @@ struct ClamAVParsingTests {
         #expect(ClamAVService.parseFinding(line: "FOUND") == nil)
     }
 
+    @Test("Clean per-file lines are recognised, so progress can count them")
+    func cleanResultLines() {
+        // Dropping --infected is what makes these lines appear at all; they are
+        // the only signal clamscan gives about how far along it is.
+        let ok = ClamAVService.parseScanResult(line: "/Users/me/Downloads/ok.txt: OK")
+        #expect(ok?.url.lastPathComponent == "ok.txt")
+        #expect(ok?.finding == nil)
+
+        let empty = ClamAVService.parseScanResult(line: "/Users/me/Downloads/e.txt: Empty file")
+        #expect(empty?.url.lastPathComponent == "e.txt")
+        #expect(empty?.finding == nil)
+
+        let hit = ClamAVService.parseScanResult(
+            line: "/Users/me/Downloads/bad.exe: Win.Test.EICAR_HDB-1 FOUND"
+        )
+        #expect(hit?.finding?.signature == "Win.Test.EICAR_HDB-1")
+    }
+
+    @Test("Summary lines are never counted as scanned files")
+    func summaryLinesAreNotResults() {
+        // These all contain ": ", which is why the leading "/" is the thing
+        // that tells a per-file result apart from the summary block.
+        for line in [
+            "----------- SCAN SUMMARY -----------",
+            "Known viruses: 8712345",
+            "Engine version: 1.5.4",
+            "Scanned directories: 12",
+            "Scanned files: 412",
+            "Infected files: 2",
+            "Data scanned: 1204.23 MB",
+            "Time: 6.512 sec (0 m 6 s)",
+        ] {
+            #expect(
+                ClamAVService.parseScanResult(line: line)?.url == nil,
+                "\(line) was counted as a scanned file"
+            )
+        }
+    }
+
+    @Test("Signature loading is read off clamscan's own progress line")
+    func signatureLoading() {
+        let mid = ClamAVService.parseSignatureLoading(
+            line: "Loading:     3s, ETA:   9s [=====>                   ]  880.00K/3.64M sigs"
+        )
+        #expect(mid?.loaded == 880_000)
+        #expect(mid?.total == 3_640_000)
+
+        let start = ClamAVService.parseSignatureLoading(
+            line: "Loading:     0s               [                         ]        0/3.64M sigs"
+        )
+        #expect(start?.loaded == 0)
+        #expect(start?.total == 3_640_000)
+
+        // Not a loading line, and not a divide-by-zero waiting to happen.
+        #expect(ClamAVService.parseSignatureLoading(line: "/tmp/a.txt: OK")?.total == nil)
+        #expect(ClamAVService.parseSignatureLoading(line: "Loading: 0/0 sigs")?.total == nil)
+    }
+
+    @Test("The file count is the denominator for the percentage")
+    func countsFiles() throws {
+        let folder = try TempFolder()
+        try folder.write("a.txt")
+        try folder.write("b.txt")
+        try folder.write(".hidden")
+        let nested = folder.url.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: nested.appendingPathComponent("c.txt"))
+
+        // Hidden files count because clamscan scans them; the directory itself
+        // doesn't, because clamscan doesn't report a verdict for one.
+        #expect(ClamAVService.countScannableFiles(in: folder.url) == 4)
+    }
+
+    @Test("Counting stops when the scan is cancelled")
+    func countingIsCancellable() throws {
+        let folder = try TempFolder()
+        for i in 0..<10 { try folder.write("f\(i).txt") }
+        #expect(ClamAVService.countScannableFiles(in: folder.url, isCancelled: { true }) <= 10)
+    }
+
     @Test("The scanned-file count is read from the summary")
     func scannedCount() {
         #expect(ClamAVService.parseScannedCount(line: "Scanned files: 1234") == 1234)
@@ -136,6 +216,52 @@ struct ClamAVIntegrationTests {
         #expect(streamed.withLock { $0.count } == 2)
     }
 
+    @Test("Every file scanned reports progress, not just the infected ones")
+    func streamsProgressForCleanFiles() async throws {
+        let folder = try TempFolder()
+        let path = try makeFakeClamscan(in: folder, script: """
+            echo "/tmp/a/one.txt: OK"
+            echo "/tmp/a/two.txt: OK"
+            echo "/tmp/a/bad.exe: Win.Test.EICAR_HDB-1 FOUND"
+            echo "/tmp/a/three.txt: Empty file"
+            echo "----------- SCAN SUMMARY -----------"
+            echo "Scanned files: 4"
+            exit 1
+            """)
+
+        let scanned = Locked(0)
+        let found = Locked(0)
+        _ = try await ClamAVService(overridePath: path).scan(
+            folder: folder.url,
+            onProgress: { update in
+                switch update {
+                case .scanned: scanned.withLock { $0 += 1 }
+                case .found: found.withLock { $0 += 1 }
+                case .loadingSignatures, .message: break
+                }
+            }
+        )
+
+        // Three clean results and one hit — four files' worth of progress,
+        // which is what a percentage needs.
+        #expect(scanned.withLock { $0 } == 3)
+        #expect(found.withLock { $0 } == 1)
+    }
+
+    @Test("A cut-short scan still reports how far it got")
+    func fallsBackToStreamedCount() async throws {
+        let folder = try TempFolder()
+        // No summary block: killed part way, or an old clamscan.
+        let path = try makeFakeClamscan(in: folder, script: """
+            echo "/tmp/a/one.txt: OK"
+            echo "/tmp/a/two.txt: OK"
+            exit 0
+            """)
+
+        let report = try await ClamAVService(overridePath: path).scan(folder: folder.url)
+        #expect(report.filesScanned == 2)
+    }
+
     @Test("A clean scan reports zero findings and exit code 0")
     func cleanScan() async throws {
         let folder = try TempFolder()
@@ -198,7 +324,7 @@ struct ClamAVIntegrationTests {
         #expect(!args.contains("--remove"))
         #expect(!args.contains("--move"))
         #expect(!args.contains("--copy"))
-        #expect(args.contains("--infected"))
+        #expect(args.contains("--stdout"))
     }
 }
 

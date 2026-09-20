@@ -165,6 +165,41 @@ public struct ClamAVService: Sendable {
         }
     }
 
+    /// How many files `clamscan` will visit.
+    ///
+    /// clamscan has no progress output of its own, so the denominator for the
+    /// percentage has to come from walking the folder first. This is a
+    /// metadata-only enumeration — no file is opened — so it costs a fraction
+    /// of the scan it is measuring.
+    ///
+    /// Hidden files and the insides of app bundles are both counted, because
+    /// clamscan descends into both. The count is a denominator, not a promise:
+    /// clamscan also reports on files it finds *inside* archives, so the real
+    /// total can come out higher. The UI clamps rather than pretending.
+    public static func countScannableFiles(
+        in folder: URL,
+        isCancelled: @Sendable () -> Bool = { false }
+    ) -> Int {
+        let keys: [URLResourceKey] = [.isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: keys,
+            options: [],
+            errorHandler: { _, _ in true }
+        ) else { return 0 }
+
+        var count = 0
+        var seen = 0
+        for case let url as URL in enumerator {
+            seen += 1
+            // Checking the flag per entry would cost more than the walk itself.
+            if seen % 512 == 0, isCancelled() { return count }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            if values?.isRegularFile == true { count += 1 }
+        }
+        return count
+    }
+
     /// Run a scan, streaming per-file progress as `clamscan` prints it.
     ///
     /// `--stdout` keeps findings out of stderr, and `--no-summary` is deliberately
@@ -178,9 +213,16 @@ public struct ClamAVService: Sendable {
 
         // Findings go to stdout; the trailing summary block is what carries the
         // scanned-file count, so `--no-summary` is deliberately not passed.
+        //
+        // `--infected` is deliberately *not* passed either: it would suppress
+        // the per-file `path: OK` lines, and those lines are the only signal
+        // clamscan gives about how far along it is. Without them the UI can
+        // only spin. The extra output costs nothing — it is streamed and
+        // counted, never buffered.
+        //
         // Fettle decides what happens to a hit, so clamscan is never given
-        // --remove or --move: it reports, it doesn't act.
-        var arguments = ["--stdout", "--infected", "--suppress-ok-results"]
+        // --remove, --move or --copy: it reports, it doesn't act.
+        var arguments = ["--stdout"]
         arguments.append(recursive ? "--recursive=yes" : "--recursive=no")
         arguments.append(folder.path)
 
@@ -190,12 +232,24 @@ public struct ClamAVService: Sendable {
         let result = try await Process.runStreaming(
             executable: path,
             arguments: arguments,
+            // Piped, clamscan holds every line until it exits — a thirteen
+            // second scan would report nothing until it was already over.
+            // Given a terminal it line-buffers, which is what makes a real
+            // percentage possible.
+            usePseudoTerminal: true,
             onStandardOutputLine: { line in
-                if let finding = Self.parseFinding(line: line) {
-                    collected.withLock { $0.findings.append(finding) }
-                    onProgress?(.found(finding))
+                if let outcome = Self.parseScanResult(line: line) {
+                    collected.withLock { $0.streamedFiles += 1 }
+                    if let finding = outcome.finding {
+                        collected.withLock { $0.findings.append(finding) }
+                        onProgress?(.found(finding))
+                    } else {
+                        onProgress?(.scanned(outcome.url))
+                    }
+                } else if let loading = Self.parseSignatureLoading(line: line) {
+                    onProgress?(.loadingSignatures(loaded: loading.loaded, total: loading.total))
                 } else if let scanned = Self.parseScannedCount(line: line) {
-                    collected.withLock { $0.filesScanned = scanned }
+                    collected.withLock { $0.summaryFiles = scanned }
                 } else if !line.isEmpty {
                     onProgress?(.message(line))
                 }
@@ -205,24 +259,70 @@ public struct ClamAVService: Sendable {
         let accumulated = collected.withLock { $0 }
         return ClamAVScanReport(
             findings: accumulated.findings,
-            filesScanned: accumulated.filesScanned,
+            // The summary is authoritative when clamscan printed one; the
+            // streamed count is the fallback so a cut-short scan still reports
+            // what it got through.
+            filesScanned: accumulated.summaryFiles > 0
+                ? accumulated.summaryFiles
+                : accumulated.streamedFiles,
             duration: Date().timeIntervalSince(started),
             exitCode: result.exitCode,
             errorOutput: result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 
+    /// One per-file result line: `/path/to/file: OK`, `/path/to/file: Empty file`
+    /// or `/path/to/file: Signature.Name FOUND`.
+    ///
+    /// The leading `/` is what separates these from the summary block, which is
+    /// full of lines like `Scanned files: 412` that also contain `": "`.
+    static func parseScanResult(line: String) -> (url: URL, finding: MalwareFinding?)? {
+        guard line.hasPrefix("/") else { return nil }
+        // Split on the LAST ": " so paths containing ": " still parse.
+        guard let separator = line.range(of: ": ", options: .backwards) else { return nil }
+        let path = String(line[line.startIndex..<separator.lowerBound])
+        let verdict = String(line[separator.upperBound...])
+            .trimmingCharacters(in: .whitespaces)
+        guard !path.isEmpty, !verdict.isEmpty else { return nil }
+
+        let url = URL(fileURLWithPath: path)
+        guard verdict.hasSuffix("FOUND") else { return (url, nil) }
+        let signature = String(verdict.dropLast("FOUND".count))
+            .trimmingCharacters(in: .whitespaces)
+        guard !signature.isEmpty else { return (url, nil) }
+        return (url, MalwareFinding(url: url, signature: signature))
+    }
+
     /// `/path/to/file: Signature.Name FOUND`
     static func parseFinding(line: String) -> MalwareFinding? {
-        guard line.hasSuffix(" FOUND") else { return nil }
-        let body = String(line.dropLast(" FOUND".count))
-        // Split on the LAST ": " so paths containing ": " still parse.
-        guard let separator = body.range(of: ": ", options: .backwards) else { return nil }
-        let path = String(body[body.startIndex..<separator.lowerBound])
-        let signature = String(body[separator.upperBound...])
-            .trimmingCharacters(in: .whitespaces)
-        guard !path.isEmpty, !signature.isEmpty else { return nil }
-        return MalwareFinding(url: URL(fileURLWithPath: path), signature: signature)
+        parseScanResult(line: line)?.finding
+    }
+
+    /// `Loading:     3s, ETA:   9s [=====>    ]  880.00K/3.64M sigs`
+    ///
+    /// clamscan reads its whole signature set into memory before it looks at a
+    /// single file, and on a small folder that is most of the wait. Parsing
+    /// this is what lets the screen say so instead of sitting at 0%.
+    static func parseSignatureLoading(line: String) -> (loaded: Double, total: Double)? {
+        guard line.hasPrefix("Loading:"), line.hasSuffix("sigs") else { return nil }
+        guard let fraction = line.split(separator: " ").last(where: { $0.contains("/") })
+        else { return nil }
+        let parts = fraction.split(separator: "/")
+        guard parts.count == 2,
+              let loaded = signatureCount(parts[0]),
+              let total = signatureCount(parts[1]),
+              total > 0
+        else { return nil }
+        return (loaded, total)
+    }
+
+    /// `880.00K`, `3.64M`, `23` — clamscan abbreviates once the numbers get big.
+    private static func signatureCount(_ text: Substring) -> Double? {
+        let multipliers: [Character: Double] = ["K": 1_000, "M": 1_000_000, "G": 1_000_000_000]
+        if let last = text.last, let multiplier = multipliers[last] {
+            return Double(text.dropLast()).map { $0 * multiplier }
+        }
+        return Double(text)
     }
 
     /// `Scanned files: 1234`
@@ -234,10 +334,19 @@ public struct ClamAVService: Sendable {
 
 private struct ScanAccumulator {
     var findings: [MalwareFinding] = []
-    var filesScanned = 0
+    /// From the trailing summary block.
+    var summaryFiles = 0
+    /// Counted from the per-file result lines as they arrive.
+    var streamedFiles = 0
 }
 
 public enum ClamAVProgress: Sendable {
     case found(MalwareFinding)
+    /// A file finished clean. One of these per file is what drives the
+    /// percentage once the scan proper is under way.
+    case scanned(URL)
+    /// clamscan is still reading its signature database into memory. Nothing
+    /// in the user's folder has been touched yet.
+    case loadingSignatures(loaded: Double, total: Double)
     case message(String)
 }

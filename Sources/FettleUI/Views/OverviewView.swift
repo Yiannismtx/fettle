@@ -38,11 +38,10 @@ struct OverviewView: View {
     private var content: some View {
         switch model.state {
         case .loading:
-            VStack(spacing: Theme.Spacing.m) {
-                ProgressView()
-                Text("Reading \(app.folder.lastPathComponent)…").foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Opening this page normally resolves faster than a spinner can
+            // usefully appear, so it doesn't get one unless the folder is
+            // genuinely slow to read.
+            LoadingIndicator(label: "Reading \(app.folder.lastPathComponent)…")
         case .failed(let message):
             EmptyStateView(
                 systemImage: "exclamationmark.triangle",

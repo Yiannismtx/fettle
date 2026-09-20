@@ -124,6 +124,133 @@ struct PageHeader<Trailing: View>: View {
     }
 }
 
+/// A loading indicator that only appears if the wait is long enough to need one.
+///
+/// Opening a page in Fettle usually resolves in well under a second. A spinner
+/// that flashes up for 200ms doesn't read as "loading" — it reads as the window
+/// glitching, and it makes a fast app look unsteady. So the indicator is held
+/// back until the wait is long enough that silence would be the confusing
+/// choice instead.
+///
+/// This is for work that starts on its own when a page opens. Work the user
+/// explicitly asked for — pressing Scan — gets feedback immediately, because
+/// there a press with no response reads as a press that didn't land.
+struct DelayedProgressView<Content: View>: View {
+    /// Long enough that a normal page open never shows a spinner at all.
+    var delay: Duration = .seconds(3)
+    /// Announced to VoiceOver straight away, whether or not the spinner is up:
+    /// the reason for hiding it is visual restlessness, which doesn't apply.
+    var accessibilityLabel: String
+    @ViewBuilder var content: Content
+
+    @State private var isVisible = false
+
+    var body: some View {
+        ZStack {
+            if isVisible {
+                content.transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .fettleAnimation(Theme.quickFade, value: isVisible)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            isVisible = true
+        }
+    }
+}
+
+/// The standard "this page is still working" state: nothing at all for the
+/// first few seconds, then a spinner, a line of explanation and a way out.
+struct LoadingIndicator: View {
+    let label: String
+    var delay: Duration = .seconds(3)
+    var onCancel: (() -> Void)?
+
+    var body: some View {
+        DelayedProgressView(delay: delay, accessibilityLabel: label) {
+            VStack(spacing: Theme.Spacing.m) {
+                ProgressView()
+                Text(label)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                if let onCancel {
+                    Button("Cancel", action: onCancel)
+                }
+            }
+        }
+    }
+}
+
+/// A determinate progress bar with a percentage and a rotating status line.
+///
+/// Used where the work is long enough that "how much is left?" is the question
+/// on the user's mind. The bar goes indeterminate rather than showing a made-up
+/// number while the total is still unknown.
+struct ScanProgressPanel: View {
+    let title: String
+    let fraction: Double?
+    let percentText: String?
+    let status: String
+    var onCancel: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.xl) {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.l) {
+                    Text(title)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .tracking(-0.2)
+                    Spacer(minLength: 0)
+                    if let percentText {
+                        // Monospaced digits: proportional ones re-lay-out the
+                        // row every time the number ticks over, which reads as
+                        // the text twitching.
+                        Text(percentText)
+                            .font(.title3.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                    }
+                }
+
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+
+                Text(status)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentTransition(.opacity)
+            }
+            .frame(maxWidth: 460)
+            // The bar eases to each new value instead of jumping, and the
+            // status cross-fades. Both are critically damped: nothing here was
+            // thrown by a gesture, so nothing should overshoot.
+            .fettleAnimation(Theme.standardSpring, value: fraction)
+            .fettleAnimation(Theme.quickFade, value: status)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(title)
+            .accessibilityValue(percentText.map { "\($0). \(status)" } ?? status)
+
+            if let onCancel {
+                Button("Cancel", action: onCancel)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Theme.Spacing.xxl)
+    }
+}
+
 /// The bar that sits under every review list: what's selected, what it frees,
 /// and the single button that commits the change.
 struct ReviewFooter: View {

@@ -75,13 +75,10 @@ struct InstallersView: View {
                 action: { model.scan(folder: app.folder, settings: app.settings) }
             )
         case .scanning:
-            VStack(spacing: Theme.Spacing.m) {
-                ProgressView()
-                Text("Reading \(app.folder.lastPathComponent) and /Applications…")
-                    .foregroundStyle(.secondary)
-                Button("Cancel") { model.cancelScan() }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingIndicator(
+                label: "Reading \(app.folder.lastPathComponent) and /Applications…",
+                onCancel: { model.cancelScan() }
+            )
         case .failed(let message):
             EmptyStateView(
                 systemImage: "exclamationmark.triangle",

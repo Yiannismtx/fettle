@@ -64,12 +64,7 @@ struct OrganizeView: View {
                 action: { model.plan(folder: app.folder, settings: app.settings) }
             )
         case .planning:
-            VStack(spacing: Theme.Spacing.m) {
-                ProgressView()
-                Text("Reading \(app.folder.lastPathComponent)…")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingIndicator(label: "Reading \(app.folder.lastPathComponent)…")
         case .failed(let message):
             EmptyStateView(
                 systemImage: "exclamationmark.triangle",
